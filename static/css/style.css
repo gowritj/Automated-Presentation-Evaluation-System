@@ -1,0 +1,47 @@
+/* =========================
+   LIGHT THEME (Default)
+========================= */
+
+:root {
+  /* Backgrounds */
+  --bg-main: #FFFFFF;
+  --bg-card: #F8FAFC;
+
+  /* Text */
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+
+  /* Primary Brand */
+  --primary: #4F46E5;
+  --primary-hover: #4338CA;
+
+  /* Borders */
+  --border: #E2E8F0;
+
+  /* Status Colors */
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+}
+
+
+/* =========================
+   DARK THEME
+========================= */
+
+[data-theme="dark"] {
+  --bg-main: #020617;
+  --bg-card: #0F172A;
+
+  --text-primary: #E5E7EB;
+  --text-secondary: #9CA3AF;
+
+  --primary: #6366F1;
+  --primary-hover: #818CF8;
+
+  --border: #1E293B;
+
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --danger: #F87171;
+}
