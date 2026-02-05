@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sign Up | PresenLytics</title>
+
+    <link rel="stylesheet" href="../static/css/signup.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- NAVBAR -->
+    <div class="nav-bar">
+        <div class="logo">
+            <img src="../static/assests/logo.png" alt="PresenLytics Logo">
+        </div>
+
+        <div class="brand">PresenLytics</div>
+        <button class="nav-login">Login</button>
+    </div>
+
+    <!-- SIGNUP FORM -->
+    <form class="signup-form" method="post">
+        <h1 class="signup-title">Sign Up</h1>
+
+        <div class="input-group">
+            <img src="../static/assests/user.svg" class="icon">
+            <input type="text" name="fullname" placeholder="Full Name" required>
+        </div>
+
+        <div class="input-group">
+            <img src="../static/assests/Mail.svg" class="icon">
+            <input type="email" name="email" placeholder="Email" required>
+        </div>
+
+        <!-- PASSWORD -->
+        <div class="input-group">
+            <img src="../static/assests/Lock.svg" class="icon">
+            <input type="password" id="password" name="password" placeholder="Password" required>
+            <img src="../static/assests/Eye.svg" class="eye" onclick="togglePassword('password')">
+        </div>
+
+        <!-- CONFIRM PASSWORD -->
+        <div class="input-group">
+            <img src="../static/assests/Lock.svg" class="icon">
+            <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm Password"
+                required>
+            <img src="../static/assests/Eye.svg" class="eye" onclick="togglePassword('confirm_password')">
+        </div>
+
+        <button type="submit" class="signup-btn">Sign Up</button>
+
+        <p class="login-text">
+            Already have an account?
+            <span>Login</span>
+        </p>
+    </form>
+
+
+</body>
+
+</html>
