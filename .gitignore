@@ -4,9 +4,7 @@ venv/
 # Python cache
 __pycache__/
 
-# Uploaded videos
-uploads/
-
 # OS files
 .DS_Store
 Thumbs.db
+uploads/videos/*

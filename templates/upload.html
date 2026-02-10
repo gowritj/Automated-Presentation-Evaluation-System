@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Upload Presentation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="../static/css/upload.css">
+</head>
+
+<body>
+
+  <div class="page">
+    <div class="upload-card">
+
+      <h1 class="heading">Upload Your Presentation</h1>
+      <p class="subheading">
+        Upload your presentation video to receive AI-powered feedback
+      </p>
+
+      <form id="uploadForm" enctype="multipart/form-data">
+
+        <!-- FILE INPUT -->
+        <label class="file-box">
+          <input
+            type="file"
+            name="video"
+            id="videoInput"
+            accept="video/*"
+            required
+            hidden
+          />
+
+          <div class="file-ui" id="fileUI">
+            <div class="cloud">☁️</div>
+            <p><strong>Click to choose video</strong></p>
+            <span>MP4, MOV supported</span>
+          </div>
+        </label>
+
+        <!-- VIDEO PREVIEW -->
+        <div class="preview-container" id="previewContainer" style="display: none;">
+          <video id="videoPreview" controls></video>
+          <p class="file-name" id="fileName"></p>
+        </div>
+
+        <!-- INPUTS -->
+        <div class="input-group">
+          <label>Tag Name</label>
+          <input type="text" name="tag" placeholder="Eg: John" required />
+        </div>
+
+        <div class="input-group">
+          <label>Video Title</label>
+          <input type="text" name="video_name" placeholder="Eg: Project Review" required />
+        </div>
+
+        <!-- BUTTON -->
+        <button type="submit" class="upload-btn">
+          Upload & Analyze →
+        </button>
+
+      </form>
+
+    </div>
+  </div>
+
+  <!-- JS -->
+  <script src="/static/js/upload.js"></script>
+</body>
+</html>
