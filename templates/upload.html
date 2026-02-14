@@ -103,10 +103,31 @@
         </div>
 
         <!-- INPUTS -->
-        <div class="input-group">
-          <label>Tag Name</label>
-          <input type="text" name="tag" placeholder="Eg: John" required />
-        </div>
+        <!-- TAG SECTION -->
+<div class="input-group tag-section">
+
+  <label>Select Person (Tag)</label>
+
+  <!-- Dropdown -->
+  <select id="tagDropdown" name="tag" required>
+    <option value="">Select existing tag</option>
+    <option value="john">John</option>
+    <option value="aasi">Aasi</option>
+  </select>
+
+  <!-- Divider -->
+  <div class="tag-divider">
+    <span>or</span>
+  </div>
+
+  <!-- Create New Tag -->
+  <div class="new-tag-row">
+    <input type="text" id="newTagInput" placeholder="Create new tag" />
+    <button type="button" class="add-tag-btn">Add</button>
+  </div>
+
+</div>
+
 
         <div class="input-group">
           <label>Video Title</label>
