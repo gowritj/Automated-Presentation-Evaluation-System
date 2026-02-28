@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analysis - PresenLytics</title>
+
+    <link rel="stylesheet" href="../static/css/analysis.css" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Tektur:wght@400..900&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" sizes="32x32"
+          href="{{ url_for('static', filename='assests/logo.png') }}">
+</head>
+
+<body>
+
+    <video class="bg-video" autoplay muted loop playsinline>
+        <source src="../static/assests/flow_gradient_remix.webm" type="video/webm">
+    </video>
+
+    <!-- NAVBAR -->
+    <header class="navbar">
+
+    <div class="navbar-left">
+        <div class="logo">
+            <img src="../static/assests/logo.png" alt="PresenLytics Logo">
+        </div>
+        <a href="/index" class="brand">PresenLytics</a>
+    </div>
+
+    <div class="navbar-right">
+        <div class="profile-icon" onclick="toggleProfile()">
+            <img src="../static/assests/profile.svg" alt="profile icon">
+        </div>
+    </div>
+
+</header>
+
+    <!-- PROFILE PANEL -->
+    <aside class="profile-panel" id="profilePanel">
+    <h3>Your Profile</h3>
+
+    <p><strong>Name:</strong> <span id="userName">User</span></p>
+    <p><strong>Email:</strong> <span id="userEmail">user@email.com</span></p>
+
+    <hr />
+
+    <p>Tags Created: <span id="profileTagCount">0</span></p>
+    <p>Videos Uploaded: <span id="profileVideoCount">0</span></p>
+
+    <button class="profile-btn">Edit Profile</button>
+    <button class="profile-btn logout" onclick="logout()">Logout</button>
+</aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="dashboard">
+
+        <!-- Header -->
+        <div class="analysis-header">
+            <div>
+                <h1>{{ video.video_title }}</h1>
+                <p class="tag-label">Tag: {{ tag_name }}</p>
+                <p class="subtitle">AI Performance Breakdown</p>
+            </div>
+
+            <a href="/existing-user" class="cta-upload-btn">
+                ← Back to Dashboard
+            </a>
+        </div>
+
+        <!-- Overall Score Section -->
+        <section class="performance-section">
+            <h2 class="section-title">Overall Performance</h2>
+
+            <div class="stats-container">
+
+                <div class="stat-card large-score">
+                    <h2>{{ analysis.overall_score }}%</h2>
+                    <p>Overall Confidence Score</p>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Metrics -->
+        <section class="performance-section">
+            <h2 class="section-title">Detailed Metrics</h2>
+
+            <div class="stats-container">
+
+                <div class="stat-card">
+                    <h2>{{ analysis.speech_rate }}</h2>
+                    <p>Speech Rate (WPM)</p>
+                </div>
+
+                <div class="stat-card">
+                    <h2>{{ analysis.filler_words }}</h2>
+                    <p>Filler Words</p>
+                </div>
+
+                <div class="stat-card">
+                    <h2>{{ analysis.posture_score }}%</h2>
+                    <p>Posture Score</p>
+                </div>
+
+                <div class="stat-card">
+                    <h2>{{ analysis.eye_contact_score }}%</h2>
+                    <p>Eye Contact</p>
+                </div>
+
+                <div class="stat-card">
+                    <h2>{{ analysis.gesture_score }}%</h2>
+                    <p>Gesture Score</p>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <script type="module" src="../static/js/analysis.js"></script>
+
+</body>
+</html>

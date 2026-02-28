@@ -1,0 +1,209 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: radial-gradient(circle at center, #0b1535, #050a1f);
+  height: 100vh;
+  color: white;
+  overflow-x: hidden;
+  font-family: "Tektur", sans-serif;
+}
+
+/* NAVBAR */
+/* ================= NAVBAR ================= */
+
+.navbar {
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  z-index: 1000;
+}
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+}
+
+.logo {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.logo img {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+.brand {
+  font-size: 32px;
+  font-weight: 900;
+  color: #ffffff;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.profile-icon img {
+  width: 26px;
+  cursor: pointer;
+  transition: 0.3s ease;
+}
+
+.profile-icon img:hover {
+  transform: scale(1.1);
+}
+/* PROFILE PANEL */
+/* ================= PROFILE PANEL ================= */
+
+.profile-panel {
+  position: fixed;
+  top: 90px;
+  right: -300px;
+  width: 300px;
+  height: calc(100vh - 90px);
+  background: #062041;
+  padding: 20px;
+  transition: right 0.3s ease;
+  z-index: 1000;
+}
+
+.profile-panel.active {
+  right: 0;
+}
+
+.profile-panel h3 {
+  margin-bottom: 15px;
+}
+
+.profile-panel p {
+  font-size: 16px;
+  margin: 8px 0;
+}
+
+.profile-btn {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border: none;
+  background: #cbd5f5;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: 0.3s ease;
+}
+
+.profile-btn:hover {
+  background: #a5b4fc;
+  transform: translateY(-2px);
+}
+
+.logout {
+  background: #ff5b5b;
+  color: white;
+}
+/* MAIN */
+.dashboard {
+  padding: 40px;
+}
+
+/* Header */
+.analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 30px;
+}
+
+.tag-label {
+  margin-top: 6px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.subtitle {
+  font-size: 14px;
+  opacity: 0.7;
+  margin-top: 5px;
+}
+
+/* Sections */
+.performance-section {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  margin-bottom: 20px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+/* Cards */
+.stats-container {
+  display: flex;
+  gap: 25px;
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  flex: 1;
+  min-width: 180px;
+  background: #062041;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  transition: 0.3s ease;
+}
+
+.stat-card:hover {
+  background: #0a2c57;
+  transform: translateY(-4px);
+}
+
+.stat-card h2 {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.large-score {
+  min-width: 300px;
+}
+
+.cta-upload-btn {
+  display: inline-block;
+  background: #cbd5f5;
+  color: black;
+  padding: 8px 18px;
+  border-radius: 25px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.cta-upload-btn:hover {
+  background: #a5b4fc;
+  transform: translateY(-2px);
+}
+
+/* BG VIDEO */
+.bg-video {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -1;
+}

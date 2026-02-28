@@ -210,8 +210,22 @@ def existing_user():
     return render_template("existing-user.html")   
 @app.route("/analysis")
 def analysis():
-    return render_template("analysis.html") 
+    video_id = request.args.get("video_id")
 
+    if not video_id:
+        return "Video ID missing"
+
+    video = Video.query.get(video_id)
+
+    if not video or not video.analysis:
+        return "Analysis not found"
+
+    return render_template(
+        "analysis.html",
+        video=video,
+        analysis=video.analysis,
+        tag_name=video.tag.tag_name   # 🔥 ADD THIS
+    )
 @app.route("/api/get-tags/<firebase_uid>", methods=["GET"])
 def get_tags(firebase_uid):
 
