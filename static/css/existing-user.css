@@ -130,25 +130,6 @@ li {
   transform: translateX(3px);
 }
 
-/* ADD TAG BUTTON */
-
-.add-tag-btn {
-  margin-top: 10px;
-  width: 100%;
-  padding: 9px;
-  border-radius: 20px;
-  border: none;
-  background: #cbd5f5;
-  cursor: pointer;
-  font-weight: 600;
-  transition: 0.3s ease;
-}
-
-.add-tag-btn:hover {
-  background: #a5b4fc;
-  transform: translateY(-2px);
-}
-
 /* EMPTY STATE */
 
 .empty-state {

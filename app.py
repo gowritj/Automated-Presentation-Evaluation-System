@@ -207,7 +207,10 @@ def upload_page():
     return render_template("upload.html")
 @app.route("/existing-user")
 def existing_user():
-    return render_template("existing-user.html")    
+    return render_template("existing-user.html")   
+@app.route("/analysis")
+def analysis():
+    return render_template("analysis.html") 
 
 @app.route("/api/get-tags/<firebase_uid>", methods=["GET"])
 def get_tags(firebase_uid):
@@ -230,16 +233,61 @@ def user_stats(firebase_uid):
     if not user:
         return jsonify({
             "tag_count": 0,
-            "video_count": 0
+            "video_count": 0,
+            "avg_score": 0
         })
 
     tag_count = Tag.query.filter_by(user_id=user.id).count()
     video_count = Video.query.filter_by(user_id=user.id).count()
 
+    # 🔹 Get all analysis for this user's videos
+    analyses = (
+        db.session.query(Analysis)
+        .join(Video, Analysis.video_id == Video.id)
+        .filter(Video.user_id == user.id)
+        .all()
+    )
+
+    if analyses:
+        avg_score = round(
+            sum(a.overall_score for a in analyses) / len(analyses),
+            2
+        )
+    else:
+        avg_score = 0
+
     return jsonify({
         "tag_count": tag_count,
-        "video_count": video_count
+        "video_count": video_count,
+        "avg_score": avg_score
     })
+
+@app.route("/api/get-videos/<firebase_uid>", methods=["GET"])
+def get_videos(firebase_uid):
+
+    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+
+    if not user:
+        return jsonify({"videos": []})
+
+    videos = (
+        Video.query
+        .filter_by(user_id=user.id)
+        .order_by(Video.upload_date.desc())
+        .all()
+    )
+
+    video_list = []
+
+    for video in videos:
+        video_list.append({
+            "id": video.id,
+            "video_title": video.video_title,
+            "upload_date": video.upload_date.strftime("%d %b %Y"),
+            "overall_score": video.analysis.overall_score if video.analysis else 0
+        })
+
+    return jsonify({"videos": video_list})
 
 if __name__ == "__main__":
     with app.app_context():

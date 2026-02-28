@@ -10,8 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Tektur:wght@400..900&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" sizes="32x32"
-          href="{{ url_for('static', filename='assests/logo.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='assests/logo.png') }}">
 </head>
 
 <body>
@@ -28,7 +27,7 @@
             <div class="logo">
                 <img src="../static/assests/logo.png" alt="PresenLytics Logo">
             </div>
-           <a href="/index" class="brand">PresenLytics</a>
+            <a href="/index" class="brand">PresenLytics</a>
         </div>
 
         <div class="navbar-right">
@@ -49,18 +48,16 @@
         <h3>Your Tags</h3>
 
         <!-- Tag List -->
-        <ul class="tag-list">
-            <li>John Doe</li>
-            <li>Anjali</li>
-            <li>Team Leader</li>
-        </ul>
-
-        <button class="add-tag-btn">+ Add New Tag</button>
+        <ul class="tag-list" id="tagList"></ul>
 
         <h3>Quick Actions</h3>
         <ul>
-            <a href="/upload"><li>Upload Presentation</li></a>
-            <a href="/analytics"><li>View Analytics</li></a>
+            <a href="/upload">
+                <li>Upload Presentation</li>
+            </a>
+            <a href="/analytics">
+                <li>View Analytics</li>
+            </a>
         </ul>
 
     </aside>
@@ -75,9 +72,8 @@
 
         <hr />
 
-        <p>Tags Created: 3</p>
-        <p>Videos Uploaded: 7</p>
-
+        <p>Tags Created: <span id="profileTagCount">0</span></p>
+        <p>Videos Uploaded: <span id="profileVideoCount">0</span></p>
         <button class="profile-btn">Edit Profile</button>
         <button class="profile-btn logout" onclick="logout()">Logout</button>
 
@@ -94,17 +90,19 @@
         <div class="stats-container">
 
             <div class="stat-card">
-                <h2>7</h2>
+                <h2 id="videoCount">0</h2>
                 <p>Total Videos</p>
+
+
             </div>
 
             <div class="stat-card">
-                <h2>3</h2>
+                <h2 id="tagCount">0</h2>
                 <p>Active Tags</p>
             </div>
 
             <div class="stat-card">
-                <h2>82%</h2>
+                <h2 id="avgScore">0%</h2>
                 <p>Average Confidence Score</p>
             </div>
 
@@ -114,20 +112,8 @@
         <section class="recent-section">
             <h2>Recent Presentations</h2>
 
-            <div class="video-list">
-
-                <div class="video-card">
-                    <h3>AI Seminar - John</h3>
-                    <p>Date: 20 Feb 2026</p>
-                    <a href="/analytics" class="view-btn">View Analysis</a>
-                </div>
-
-                <div class="video-card">
-                    <h3>Mini Project Review</h3>
-                    <p>Date: 15 Feb 2026</p>
-                    <a href="/analytics" class="view-btn">View Analysis</a>
-                </div>
-
+            <div class="video-list" id="videoList">
+                <!-- Videos will be inserted dynamically -->
             </div>
         </section>
 
