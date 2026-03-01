@@ -61,7 +61,6 @@ onAuthStateChanged(auth, (user) => {
         document.getElementById("profileVideoCount").textContent = stats.video_count;
         document.getElementById("profileTagCount").textContent = stats.tag_count;
 
-        document.getElementById("avgScore").textContent = stats.avg_score + "%";
       });
 
     // 🔹 Fetch Tags

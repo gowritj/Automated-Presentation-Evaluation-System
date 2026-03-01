@@ -387,3 +387,7 @@ canvas {
 .delete-tag-btn:hover img {
   filter: drop-shadow(0 0 6px #ff5b5b);
 }
+.chart-card {
+    position: relative;
+    height: 350px;
+}

@@ -306,6 +306,53 @@ def get_videos(firebase_uid):
 
     return jsonify({"videos": video_list})
 
+@app.route("/api/tag-analytics", methods=["GET"])
+def tag_analytics():
+
+    firebase_uid = request.args.get("firebase_uid")
+    tag_name = request.args.get("tag")
+
+    if not firebase_uid or not tag_name:
+        return jsonify({"videos": []})
+
+    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+
+    if not user:
+        return jsonify({"videos": []})
+
+    tag = Tag.query.filter(
+        Tag.user_id == user.id,
+        Tag.tag_name.ilike(tag_name)
+    ).first()
+
+    if not tag:
+        return jsonify({"videos": []})
+
+    videos = (
+        Video.query
+        .filter_by(user_id=user.id, tag_id=tag.id)
+        .order_by(Video.upload_date.asc())
+        .all()
+    )
+
+    video_data = []
+
+    for video in videos:
+        if video.analysis:
+            video_data.append({
+                "title": video.video_title,
+                "upload_date": video.upload_date.strftime("%d %b %Y"),
+                "overall_score": video.analysis.overall_score,
+                "filler_words": video.analysis.filler_words,
+                "posture_score": video.analysis.posture_score,
+                "eye_contact_score": video.analysis.eye_contact_score,
+                "gesture_score": video.analysis.gesture_score
+            })
+
+    return jsonify({"videos": video_data})
+
+
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()

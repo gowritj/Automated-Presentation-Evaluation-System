@@ -1,65 +1,104 @@
+import { auth } from "./firebase.js";
+import {
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// Get tag from URL
-const params = new URLSearchParams(window.location.search);
-const tag = params.get("tag") || "Public Speaking";
+/* ===============================
+   WAIT FOR FIREBASE AUTH
+================================= */
 
-document.getElementById("tagTitle").textContent = `Tag: ${tag}`;
+onAuthStateChanged(auth, (user) => {
 
-// Dummy Data
-const scores = [65, 72, 78, 85, 91];
+  if (!user) {
+    window.location.href = "/login";
+    return;
+  }
 
-// Score Trend Chart
-const ctx1 = document.getElementById("scoreChart");
+  const firebase_uid = user.uid;
 
-new Chart(ctx1, {
+  const params = new URLSearchParams(window.location.search);
+  const tag = params.get("tag") || "Public Speaking";
+
+  document.getElementById("tagTitle").textContent = `Tag: ${tag}`;
+
+  loadTagAnalytics(firebase_uid, tag);
+});
+
+
+/* ===============================
+   LOAD ANALYTICS DATA
+================================= */
+
+async function loadTagAnalytics(firebase_uid, tag) {
+
+  console.log("UID:", firebase_uid);
+  console.log("Tag:", tag);
+
+  const response = await fetch(
+    `/api/tag-analytics?firebase_uid=${firebase_uid}&tag=${encodeURIComponent(tag)}`
+  );
+
+  const data = await response.json();
+  console.log("API DATA:", data);
+
+  if (!data.videos || data.videos.length === 0) {
+    console.log("No videos found for this tag");
+    return;
+  }
+
+  const videos = data.videos;
+
+  const labels = videos.map(v => v.title);
+  const scores = videos.map(v => v.overall_score);
+// 🔥 Calculate Average Confidence
+const avgConfidence = (
+  scores.reduce((a, b) => a + b, 0) / scores.length
+).toFixed(2);
+
+// 🔥 Calculate Best Performance
+const bestPerformance = Math.max(...scores).toFixed(2);
+
+// 🔥 Update Stat Cards
+const avgScoreEl = document.getElementById("avgScore");
+if (avgScoreEl) avgScoreEl.textContent = avgConfidence + "%";
+
+const bestScoreEl = document.getElementById("bestScore");
+if (bestScoreEl) bestScoreEl.textContent = bestPerformance + "%";
+  const avgFiller = videos.reduce((a,b)=>a+b.filler_words,0)/videos.length;
+  const avgPosture = videos.reduce((a,b)=>a+b.posture_score,0)/videos.length;
+  const avgEye = videos.reduce((a,b)=>a+b.eye_contact_score,0)/videos.length;
+  const avgGesture = videos.reduce((a,b)=>a+b.gesture_score,0)/videos.length;
+
+  // Line Chart
+  new Chart(document.getElementById("scoreChart"), {
     type: "line",
     data: {
-        labels: ["Video 1", "Video 2", "Video 3", "Video 4", "Video 5"],
-        datasets: [{
-            label: "Confidence Score",
-            data: scores,
-            borderColor: "#cbd5f5",
-            backgroundColor: "rgba(203,213,245,0.2)",
-            tension: 0.4,
-            fill: true
-        }]
-    },
-    options: {
-        plugins: {
-            legend: { labels: { color: "white" } }
-        },
-        scales: {
-            x: { ticks: { color: "white" } },
-            y: { ticks: { color: "white" } }
-        }
+      labels: labels,
+      datasets: [{
+        label: "Confidence Score",
+        data: scores,
+        borderColor: "#cbd5f5",
+        backgroundColor: "rgba(203,213,245,0.2)",
+        tension: 0.4,
+        fill: true
+      }]
     }
-});
+  });
 
-// Improvement Chart
-const ctx2 = document.getElementById("improvementChart");
-
-new Chart(ctx2, {
+  // Bar Chart
+  new Chart(document.getElementById("improvementChart"), {
     type: "bar",
     data: {
-        labels: ["Filler Words", "Posture", "Eye Contact", "Confidence"],
-        datasets: [{
-            label: "Average Performance",
-            data: [70, 80, 75, 88],
-            backgroundColor: "#a5b4fc",
-            barThickness: 50,
-            categoryPercentage: 0.9
-        }]
-    },
-    options: {
-        plugins: {
-            legend: { labels: { color: "white" } }
-        },
-        scales: {
-            x: { ticks: { color: "white" } },
-            y: { ticks: { color: "white" } }
-        }
+      labels: ["Filler Words", "Posture", "Eye Contact", "Gestures"],
+      datasets: [{
+        label: "Average Performance",
+        data: [avgFiller, avgPosture, avgEye, avgGesture],
+        backgroundColor: "#a5b4fc"
+      }]
     }
-});
+  });
+}
 
 
 /* ===============================
@@ -67,22 +106,36 @@ new Chart(ctx2, {
 ================================= */
 
 window.toggleProfile = function () {
-    const profilePanel = document.getElementById("profilePanel");
-    if (!profilePanel) return;
-
-    profilePanel.classList.toggle("active");
+  const profilePanel = document.getElementById("profilePanel");
+  if (!profilePanel) return;
+  profilePanel.classList.toggle("active");
 };
 
-
-/* Close profile when clicking outside */
 document.addEventListener("click", (e) => {
-    const profilePanel = document.getElementById("profilePanel");
-    if (!profilePanel) return;
+  const profilePanel = document.getElementById("profilePanel");
+  if (!profilePanel) return;
 
-    const clickedInsideProfile = profilePanel.contains(e.target);
-    const clickedProfileIcon = e.target.closest(".profile-icon");
+  const clickedInsideProfile = profilePanel.contains(e.target);
+  const clickedProfileIcon = e.target.closest(".profile-icon");
 
-    if (!clickedInsideProfile && !clickedProfileIcon) {
-        profilePanel.classList.remove("active");
-    }
-}); 
+  if (!clickedInsideProfile && !clickedProfileIcon) {
+    profilePanel.classList.remove("active");
+  }
+});
+
+/* ===============================
+   LOGOUT FUNCTION
+================================= */
+
+window.logout = function () {
+  signOut(auth)
+    .then(() => {
+      // Optional: clear storage
+      localStorage.clear();
+
+      window.location.href = "/login";
+    })
+    .catch((error) => {
+      alert(error.message);
+    });
+};

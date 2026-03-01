@@ -13,14 +13,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // EMAIL + PASSWORD LOGIN
   form.addEventListener("submit", (e) => {
-    e.preventDefault(); // stop page reload
+    e.preventDefault();
 
     const email = form.querySelector('input[name="email"]').value;
     const password = form.querySelector('input[name="password"]').value;
 
     signInWithEmailAndPassword(auth, email, password)
-      .then(() => {
-      
+      .then((userCredential) => {
+        const user = userCredential.user;
+
+        // 🔥 SAVE UID HERE
+        localStorage.setItem("firebase_uid", user.uid);
+        localStorage.setItem("user_email", user.email);
+
         window.location.href = "/existing-user";
       })
       .catch((error) => {
@@ -33,7 +38,13 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
 
     signInWithPopup(auth, provider)
-      .then(() => {
+      .then((result) => {
+        const user = result.user;
+
+        // 🔥 SAVE UID HERE
+        localStorage.setItem("firebase_uid", user.uid);
+        localStorage.setItem("user_email", user.email);
+
         window.location.href = "/existing-user";
       })
       .catch((error) => {
