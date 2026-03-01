@@ -429,3 +429,36 @@ button,a,h1,h2,h3,h4,p,li {
   transform: translateY(-2px);
     transition: 0.3s ease;
 }
+/* FULL SCREEN OVERLAY */
+/* FULL SCREEN OVERLAY */
+.upload-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 31, 0.96);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loader-box {
+  text-align: center;
+  color: white;
+}
+
+/* Rotating Circle */
+.spinner {
+  width: 70px;
+  height: 70px;
+  border: 6px solid rgba(255,255,255,0.2);
+  border-top: 6px solid #cbd5f5;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

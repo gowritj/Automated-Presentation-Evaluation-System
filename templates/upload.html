@@ -82,8 +82,7 @@
         Upload your presentation video to receive AI-powered feedback
       </p>
 
-      <form id="uploadForm" action="/api/upload" 
-  method="POST" enctype="multipart/form-data">
+      <form id="uploadForm" >
 <input type="hidden" name="firebase_uid" id="firebaseUidInput">
         <!-- FILE INPUT -->
         <label class="file-box">
@@ -145,6 +144,12 @@
   </div>
 
   <!-- JS -->
+   <div id="uploadOverlay" class="upload-overlay">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <p>Uploading & Analyzing your video...</p>
+  </div>
+</div>
   <script type="module" src="../static/js/upload.js"></script>
 
 </body>

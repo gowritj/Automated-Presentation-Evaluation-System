@@ -222,8 +222,11 @@ if (form) {
     try {
       //  Show uploading state
       const uploadBtn = form.querySelector(".upload-btn");
-      uploadBtn.textContent = "Uploading...";
-      uploadBtn.disabled = true;
+uploadBtn.disabled = true;
+
+// Show overlay
+const overlay = document.getElementById("uploadOverlay");
+overlay.style.display = "flex";
 
       const response = await fetch(
         "/api/upload-video",
@@ -241,7 +244,6 @@ if (form) {
         uploadBtn.disabled = false;
         return;
       }
-      alert("Upload + Analysis Completed ✅");
 
       // Redirect to dashboard
 window.location.href = `/analysis?video_id=${data.video_id}`;
