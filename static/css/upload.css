@@ -134,7 +134,7 @@ button,a,h1,h2,h3,h4,p,li {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  
   margin-top: 8px;
 }
 
@@ -461,4 +461,20 @@ button,a,h1,h2,h3,h4,p,li {
   to {
     transform: rotate(360deg);
   }
+}
+
+.delete-video-btn {
+  background: transparent;   /* removes white */
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.delete-video-btn img {
+  width: 18px;
+  height: 18px;
+}
+
+.delete-video-btn:hover {
+  transform: scale(1.1);
 }

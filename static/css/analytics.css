@@ -342,3 +342,48 @@ canvas {
 .dashboard section {
   margin-bottom: 60px;
 }
+
+/* ================= ICON BUTTON BASE ================= */
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: 0.3s ease;
+}
+
+.icon-btn img {
+  width: 18px;
+  height: 18px;
+  opacity: 0.7;
+  transition: 0.3s ease;
+}
+
+.icon-btn:hover img {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+/* ================= TAG HEADER ALIGNMENT ================= */
+
+.tag-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ================= VIDEO CARD HEADER ================= */
+
+.video-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.delete-video-btn:hover img,
+.delete-tag-btn:hover img {
+  filter: drop-shadow(0 0 6px #ff5b5b);
+}
