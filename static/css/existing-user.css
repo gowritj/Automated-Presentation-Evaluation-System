@@ -152,29 +152,6 @@ li {
   margin-bottom: 10px;
 }
 
-/* QUICK ACTIONS */
-
-.sidebar ul {
-  list-style: none;
-  margin-top: 10px;
-}
-
-.sidebar ul li {
-  padding: 8px 0;
-  font-size: 15px;
-  opacity: 0.85;
-  transition: 0.3s ease;
-}
-
-.sidebar ul li:hover {
-  opacity: 1;
-  transform: translateX(4px);
-}
-
-.sidebar ul a {
-  text-decoration: none;
-  color: white;
-}
 /* ================= PROFILE PANEL ================= */
 
 .profile-panel {
