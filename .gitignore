@@ -9,3 +9,10 @@ __pycache__/
 Thumbs.db
 uploads/videos/*
 .env
+
+# Uploaded videos
+
+uploads/videos/
+*.mp4
+*.wav
+uploads/
