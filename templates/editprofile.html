@@ -1,0 +1,236 @@
+<!-- EDIT PROFILE MODAL -->
+<style>
+/* =========================
+   EDIT PROFILE MODAL STYLE
+========================= */
+/* ================= EDIT PROFILE MODAL ================= */
+
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+
+  background: rgba(5,10,31,0.75);
+  backdrop-filter: blur(6px);
+
+  justify-content: center;
+  align-items: center;
+}
+
+/* MODAL CARD */
+
+.modal-content {
+  width: 420px;
+  max-width: 90%;
+  padding: 30px;
+
+  border-radius: 16px;
+
+  background: #062041;
+  color: white;
+
+  box-shadow: 0 10px 35px rgba(0,0,0,0.45);
+
+  font-family: "Tektur", sans-serif;
+  position: relative;
+
+  animation: modalFade 0.25s ease;
+}
+
+/* TITLE */
+
+.modal-content h2 {
+  margin-bottom: 22px;
+  font-weight: 700;
+}
+
+/* CLOSE BUTTON */
+
+.close-btn {
+  position: absolute;
+  right: 18px;
+  top: 14px;
+
+  font-size: 22px;
+  cursor: pointer;
+
+  color: #cbd5f5;
+}
+
+.close-btn:hover {
+  transform: scale(1.1);
+}
+
+/* LABEL */
+
+.modal-content label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+/* INPUT */
+
+.modal-content input {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 18px;
+
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+
+  background: rgba(255,255,255,0.05);
+  color: white;
+
+  font-family: "Tektur", sans-serif;
+}
+
+.modal-content input:focus {
+  outline: none;
+  border-color: #cbd5f5;
+}
+
+/* EMAIL READONLY */
+
+#editEmail {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+/* BUTTON GROUP */
+
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+/* PRIMARY BUTTON */
+
+.primary-btn {
+  width: 100%;
+  padding: 12px;
+
+  border-radius: 24px;
+  border: none;
+
+  background: #cbd5f5;
+  color: #000;
+
+  font-weight: 600;
+  font-size: 15px;
+
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.primary-btn:hover {
+  background: #a5b4fc;
+  transform: translateY(-2px);
+}
+
+/* SECONDARY BUTTON */
+
+.secondary-btn {
+  width: 100%;
+  padding: 12px;
+
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,0.15);
+
+  background: rgba(255,255,255,0.05);
+  color: white;
+
+  font-weight: 500;
+
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.secondary-btn:hover {
+  background: rgba(255,255,255,0.1);
+  transform: translateY(-2px);
+}
+
+/* DELETE BUTTON */
+
+.delete-btn {
+  width: 100%;
+  padding: 12px;
+
+  border-radius: 24px;
+  border: none;
+
+  background: #ff5b5b;
+  color: white;
+
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.delete-btn:hover {
+  background: #ff4040;
+  transform: translateY(-2px);
+}
+/* SEPARATOR */
+
+.modal-content hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin: 22px 0;
+}
+
+/* ANIMATION */
+
+@keyframes modalFade {
+  from {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+</style>
+
+
+<div id="editProfileModal" class="modal">
+  <div class="modal-content">
+
+    <span class="close-btn" id="closeEditModal">&times;</span>
+
+    <h2>Edit Profile</h2>
+
+    <form id="editProfileForm">
+
+      <label>Name</label>
+      <input type="text" id="editName" required />
+
+      <label>Email</label>
+      <input type="email" id="editEmail" readonly />
+<hr>
+<div class="profile-actions">
+
+  <button id="changePasswordBtn" class="secondary-btn">
+    Change Password
+  </button>
+
+  <button type="submit" class="primary-btn">
+    Save Changes
+  </button>
+
+</div>
+
+<hr>
+
+<button id="deleteAccountBtn" class="delete-btn">
+  Delete Account
+</button>
+  </div>
+</div>

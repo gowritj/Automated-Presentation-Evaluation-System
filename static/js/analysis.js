@@ -91,3 +91,10 @@ window.logout = function () {
       alert(error.message);
     });
 };
+
+// LOAD EDIT PROFILE MODAL
+import { loadEditProfileModal } from "./loadModal.js";
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadEditProfileModal();
+});

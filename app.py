@@ -51,7 +51,7 @@ class User(db.Model):
     firebase_uid = db.Column(db.String(200), unique=True, nullable=False)
     email = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    name = db.Column(db.String(200)) 
     tags = db.relationship("Tag", backref="user", lazy=True)
     videos = db.relationship("Video", backref="user", lazy=True)
 
@@ -73,6 +73,7 @@ class Video(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     video_title = db.Column(db.String(200))
     cloudinary_url = db.Column(db.Text, nullable=False)
+    cloudinary_public_id = db.Column(db.String(200))
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     tag_id = db.Column(db.Integer, db.ForeignKey("tags.id"), nullable=False)
@@ -119,7 +120,11 @@ def upload_video():
     # Auto-create user if not exists
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
     if not user:
-        user = User(firebase_uid=firebase_uid, email=email)
+        user = User(
+        firebase_uid=firebase_uid,
+        email=email,
+        name=request.form.get("name", "User")
+        )
         db.session.add(user)
         db.session.commit()
 
@@ -137,6 +142,7 @@ def upload_video():
             resource_type="video"
         )
         cloudinary_url = result["secure_url"]
+        public_id = result["public_id"]
 
     except Exception as e:
         print("CLOUDINARY ERROR:", e)
@@ -146,6 +152,7 @@ def upload_video():
     new_video = Video(
         video_title=video_title,
         cloudinary_url=cloudinary_url,
+        cloudinary_public_id=public_id,
         user_id=user.id,
         tag_id=tag.id
     )
@@ -184,8 +191,56 @@ def upload_video():
         "tag_name": tag.tag_name,
         "overall_score": overall_score
     })
+@app.route("/api/update-user", methods=["POST"])
+def update_user():
 
+    data = request.json
+    firebase_uid = data.get("firebase_uid")
+    new_name = data.get("name")
 
+    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.name = new_name
+    db.session.commit()
+
+    return jsonify({"message": "Name updated successfully"})
+@app.route("/api/delete-user/<firebase_uid>", methods=["DELETE"])
+def delete_user(firebase_uid):
+
+    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    # delete analysis
+    videos = Video.query.filter_by(user_id=user.id).all()
+
+    for video in videos:
+        if video.cloudinary_public_id:
+            try:
+                cloudinary.uploader.destroy(
+                    video.cloudinary_public_id,
+                    resource_type="video"
+                )
+            except Exception as e:
+                print("Cloudinary delete error:", e)
+        Analysis.query.filter_by(video_id=video.id).delete()
+
+    # delete videos
+    Video.query.filter_by(user_id=user.id).delete()
+
+    # delete tags
+    Tag.query.filter_by(user_id=user.id).delete()
+
+    # delete user
+    db.session.delete(user)
+
+    db.session.commit()
+
+    return jsonify({"message": "User deleted successfully"})
 #page routes
 @app.route("/")
 def home():
@@ -208,6 +263,9 @@ def upload_page():
 @app.route("/existing-user")
 def existing_user():
     return render_template("existing-user.html")   
+@app.route("/editprofile-modal")
+def editprofile_modal():
+    return render_template("editprofile.html")
 @app.route("/analysis")
 def analysis():
     video_id = request.args.get("video_id")

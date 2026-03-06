@@ -43,7 +43,7 @@
         <hr />
         <p>Tags Created: <span id="profileTagCount">0</span></p>
         <p>Videos Uploaded: <span id="profileVideoCount">0</span></p>
-        <button class="profile-btn">Edit Profile</button>
+       <button class="profile-btn" id="openEditProfile">Edit Profile</button>
         <button class="profile-btn logout" onclick="logout()">Logout</button>
     </aside>
     <!-- MAIN CONTENT -->
@@ -113,7 +113,9 @@
         </section>
 
     </main>
-
+    
+    <div id="modalContainer"></div>
+<script type="module" src="../static/js/globalModal.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module" src="../static/js/analytics.js"></script>
 </body>
