@@ -59,9 +59,14 @@
                     </p>
                 </div>
 
-                <button class="icon-btn delete-tag-btn">
-                    <img src="../static/assests/delete.svg" alt="Delete Tag">
-                </button>
+                <div class="header-actions">
+                    <a href="/existing-user" class="cta-upload-btn">
+                        ← Back to Dashboard
+                    </a>
+                    <button class="icon-btn delete-tag-btn">
+                        <img src="../static/assests/delete.svg" alt="Delete Tag">
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -115,6 +120,18 @@
     </main>
     
     <div id="modalContainer"></div>
+    <!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="delete-modal">
+  <div class="delete-box">
+    <h3 id="deleteTitle">Confirm Delete</h3>
+    <p id="deleteMessage">Are you sure you want to delete?</p>
+
+    <div class="delete-actions">
+      <button id="cancelDelete" class="cancel-btn">Cancel</button>
+      <button id="confirmDelete" class="confirm-btn">Delete</button>
+    </div>
+  </div>
+</div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module" src="../static/js/analytics.js"></script>
 </body>

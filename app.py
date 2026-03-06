@@ -464,19 +464,91 @@ def tag_analytics():
     for video in videos:
         if video.analysis:
             video_data.append({
-                "id": video.id,
-                "title": video.video_title,
-                "upload_date": video.upload_date.strftime("%d %b %Y"),
-                "overall_score": video.analysis.overall_score,
-                "filler_words": video.analysis.filler_words,
-                "posture_score": video.analysis.posture_score,
-                "eye_contact_score": video.analysis.eye_contact_score,
-                "gesture_score": video.analysis.gesture_score
-            })
+    "id": video.id,
+    "tag_id": video.tag_id,
+    "title": video.video_title,
+    "upload_date": video.upload_date.strftime("%d %b %Y"),
+    "overall_score": video.analysis.overall_score,
+    "filler_words": video.analysis.filler_words,
+    "posture_score": video.analysis.posture_score,
+    "eye_contact_score": video.analysis.eye_contact_score,
+    "gesture_score": video.analysis.gesture_score
+})
 
     return jsonify({"videos": video_data})
 
+@app.route("/api/delete-video/<int:video_id>", methods=["DELETE"])
+def delete_video(video_id):
 
+    video = Video.query.get(video_id)
+
+    if not video:
+        return jsonify({"success": False, "message": "Video not found"}), 404
+
+    try:
+
+        # Delete from Cloudinary
+        if video.cloudinary_public_id:
+            cloudinary.uploader.destroy(
+                video.cloudinary_public_id,
+                resource_type="video"
+            )
+
+        # Delete analysis first
+        Analysis.query.filter_by(video_id=video.id).delete()
+
+        # Delete video
+        db.session.delete(video)
+
+        db.session.commit()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        print("Delete video error:", e)
+        return jsonify({"success": False})
+    
+
+@app.route("/api/delete-tag/<int:tag_id>", methods=["DELETE"])
+def delete_tag(tag_id):
+
+    tag = Tag.query.get(tag_id)
+
+    if not tag:
+        return jsonify({"success": False, "message": "Tag not found"}), 404
+
+    try:
+
+        videos = Video.query.filter_by(tag_id=tag.id).all()
+
+        for video in videos:
+
+            # Delete Cloudinary video
+            if video.cloudinary_public_id:
+                try:
+                    cloudinary.uploader.destroy(
+                        video.cloudinary_public_id,
+                        resource_type="video"
+                    )
+                except Exception as e:
+                    print("Cloudinary delete error:", e)
+
+            # Delete analysis
+            Analysis.query.filter_by(video_id=video.id).delete()
+
+        # Delete videos
+        Video.query.filter_by(tag_id=tag.id).delete()
+
+        # Delete tag
+        db.session.delete(tag)
+
+        db.session.commit()
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        print("Delete tag error:", e)
+        return jsonify({"success": False})
 
 if __name__ == "__main__":
     with app.app_context():
