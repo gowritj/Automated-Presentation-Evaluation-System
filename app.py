@@ -7,7 +7,9 @@ import os
 import random
 import cloudinary
 import cloudinary.uploader
-
+import whisper
+from moviepy import VideoFileClip
+import requests
 load_dotenv()
 
 #  Configure Cloudinary
@@ -41,7 +43,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 
 db = SQLAlchemy(app)
 
-
+model = whisper.load_model("tiny")
 # MODELS
 
 class User(db.Model):
@@ -98,6 +100,49 @@ class Analysis(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
+def download_video(url, filename):
+
+    response = requests.get(url)
+
+    with open(filename, "wb") as f:
+        f.write(response.content)
+
+    return filename
+def extract_audio(video_path):
+
+    video = VideoFileClip(video_path)
+
+    audio_path = "audio.wav"
+
+    video.audio.write_audiofile(audio_path)
+
+    duration = video.duration
+
+    return audio_path, duration
+def speech_to_text(audio_path):
+
+    result = model.transcribe(audio_path)
+
+    text = result["text"]
+
+    return text
+def evaluate_text(text, duration):
+
+    words = text.split()
+
+    word_count = len(words)
+
+    speech_rate = word_count / (duration / 60)
+
+    filler_list = ["um", "uh", "like", "actually", "basically"]
+
+    filler_words = 0
+
+    for word in filler_list:
+        filler_words += text.lower().count(word)
+
+    return speech_rate, filler_words
 
 # ROUTES
 
@@ -160,8 +205,29 @@ def upload_video():
     db.session.commit()
 
     # Dummy Analysis
-    speech_rate = round(random.uniform(120, 160), 2)
-    filler_words = random.randint(5, 20)
+    # Download video
+    print("Downloading video...")
+
+    video_path = download_video(cloudinary_url, "video.mp4")
+    print("Extracting audio...")
+
+    # Extract audio
+    audio_path, duration = extract_audio(video_path)
+    print("Transcribing speech...")
+
+    # Convert speech to text
+    text = speech_to_text(audio_path)
+    text = speech_to_text(audio_path)
+
+    print("----------- EXTRACTED TEXT -----------")
+    print(text)
+    print("--------------------------------------")
+    # Evaluate speech
+    print("Evaluating text...")
+
+    speech_rate, filler_words = evaluate_text(text, duration)
+
+    # Temporary body scores (still random)
     posture_score = round(random.uniform(60, 95), 2)
     eye_contact_score = round(random.uniform(60, 95), 2)
     gesture_score = round(random.uniform(60, 95), 2)
@@ -173,7 +239,7 @@ def upload_video():
 
     analysis = Analysis(
         video_id=new_video.id,
-        speech_rate=speech_rate,
+        speech_rate=round(speech_rate,2),
         filler_words=filler_words,
         posture_score=posture_score,
         eye_contact_score=eye_contact_score,

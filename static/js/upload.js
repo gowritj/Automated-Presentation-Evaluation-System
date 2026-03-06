@@ -218,10 +218,10 @@ if (form) {
     formData.append("firebase_uid", user.uid);
     formData.append("tag_name", selectedTag);
     formData.append("video_title", videoTitle);
+         const uploadBtn = form.querySelector(".upload-btn");
 
     try {
       //  Show uploading state
-      const uploadBtn = form.querySelector(".upload-btn");
 uploadBtn.disabled = true;
 
 // Show overlay
