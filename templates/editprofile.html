@@ -106,7 +106,75 @@
   gap: 12px;
   margin-top: 10px;
 }
+/* CHANGE PASSWORD BUTTON */
 
+#changePasswordBtn {
+  width: 100%;
+  padding: 12px;
+
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,0.15);
+
+  background: rgba(255,255,255,0.05);
+  color: white;
+
+  font-family: "Tektur", sans-serif;
+  font-weight: 500;
+
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+#changePasswordBtn:hover {
+  background: rgba(255,255,255,0.12);
+  transform: translateY(-2px);
+}/* PASSWORD MODAL INPUTS */
+
+#passwordModal input {
+
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 18px;
+
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+
+  background: rgba(255,255,255,0.05);
+  color: white;
+
+  font-family: "Tektur", sans-serif;
+}
+
+#passwordModal input:focus {
+  outline: none;
+  border-color: #cbd5f5;
+  box-shadow: 0 0 6px rgba(203,213,245,0.35);
+}/* UPDATE PASSWORD BUTTON */
+
+#updatePasswordBtn {
+
+  width: 100%;
+  padding: 12px;
+
+  border-radius: 24px;
+  border: none;
+
+  background: #cbd5f5;
+  color: #000;
+
+  font-family: "Tektur", sans-serif;
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+#updatePasswordBtn:hover {
+  background: #a5b4fc;
+  transform: translateY(-2px);
+}#passwordModal .modal-content {
+  animation: modalFade 0.25s ease;
+}
 /* PRIMARY BUTTON */
 
 .primary-btn {
@@ -183,6 +251,67 @@
   border-top: 1px solid rgba(255,255,255,0.08);
   margin: 22px 0;
 }
+/* PASSWORD FIELD CONTAINER */
+
+.password-field {
+  position: relative;
+}
+
+/* PASSWORD INPUT */
+
+.password-field input {
+  width: 100%;
+  padding: 10px 40px 10px 12px;
+}
+
+/* EYE ICON */
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  cursor: pointer;
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+.toggle-password:hover {
+  opacity: 1;
+}
+.input-group {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 10px 40px 10px 12px;
+}
+
+.eye {
+  width: 22px;
+  position: absolute;
+  right: 12px;
+  cursor: pointer;
+  filter: invert(1);
+  opacity: 0.8;
+}
+
+.eye:hover {
+  opacity: 1;
+}.input-group {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 10px 40px 10px 12px;
+}
 
 /* ANIMATION */
 
@@ -216,11 +345,11 @@
       <input type="email" id="editEmail" readonly />
 <hr>
 <div class="profile-actions">
+  
 
-  <button id="changePasswordBtn" class="secondary-btn">
-    Change Password
-  </button>
-
+<button type="button" id="changePasswordBtn" class="save-btn">
+  Change Password
+</button>
   <button type="submit" class="primary-btn">
     Save Changes
   </button>
@@ -233,4 +362,42 @@
   Delete Account
 </button>
   </div>
+</div>
+<!-- CHANGE PASSWORD MODAL -->
+<div id="passwordModal" class="modal">
+
+  <div class="modal-content">
+
+    <span class="close-btn" id="closePasswordModal">&times;</span>
+
+    <h2>Change Password</h2>
+<label>Current Password</label>
+<div class="input-group">
+  <input type="password" id="currentPassword">
+  <img src="/static/assests/eye.svg"
+       class="eye"
+       data-target="currentPassword">
+</div>
+
+<label>New Password</label>
+<div class="input-group">
+  <input type="password" id="newPassword">
+  <img src="/static/assests/eye.svg"
+       class="eye"
+       data-target="newPassword">
+</div>
+
+<label>Confirm Password</label>
+<div class="input-group">
+  <input type="password" id="confirmPassword">
+  <img src="/static/assests/eye.svg"
+       class="eye"
+       data-target="confirmPassword">
+</div>
+    <button id="updatePasswordBtn" class="save-btn">
+      Update Password
+    </button>
+
+  </div>
+
 </div>

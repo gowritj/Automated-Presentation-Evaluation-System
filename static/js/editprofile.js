@@ -3,7 +3,7 @@ import {
   updateProfile,
   deleteUser,
   onAuthStateChanged,
-  sendPasswordResetEmail,
+  updatePassword,
   EmailAuthProvider,
   reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
@@ -84,23 +84,78 @@ if (nameElement) {
         alert(error.message);
       }
     });
-document
-  .getElementById("changePasswordBtn")
-  ?.addEventListener("click", async () => {
+    const passwordModal = document.getElementById("passwordModal");
+const changePasswordBtn = document.getElementById("changePasswordBtn");
+const closePasswordModal = document.getElementById("closePasswordModal");
 
-    if (!currentUser) return;
+changePasswordBtn.onclick = () => {
+  passwordModal.style.display = "flex";
+};
 
-    try {
+closePasswordModal.onclick = () => {
+  passwordModal.style.display = "none";
+};
+document.getElementById("updatePasswordBtn")
+?.addEventListener("click", async () => {
 
-      await sendPasswordResetEmail(auth, currentUser.email);
+  const currentPassword =
+    document.getElementById("currentPassword").value;
 
-      alert("Password reset email sent. Check your inbox.");
+  const newPassword =
+    document.getElementById("newPassword").value;
 
-    } catch (error) {
-      alert(error.message);
-    }
+  const confirmPassword =
+    document.getElementById("confirmPassword").value;
 
-  });
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    alert("Please fill all fields.");
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    alert("Passwords do not match.");
+    return;
+  }
+
+  try {
+
+    const credential = EmailAuthProvider.credential(
+      currentUser.email,
+      currentPassword
+    );
+
+    // reauthenticate user
+    await reauthenticateWithCredential(currentUser, credential);
+
+    // update password
+    await updatePassword(currentUser, newPassword);
+
+    alert("Password updated successfully.");
+
+    passwordModal.style.display = "none";
+
+  } catch (error) {
+    alert(error.message);
+  }
+
+});
+// document
+//   .getElementById("changePasswordBtn")
+//   ?.addEventListener("click", async () => {
+
+//     if (!currentUser) return;
+
+//     try {
+
+//       await sendPasswordResetEmail(auth, currentUser.email);
+
+//       alert("Password reset email sent. Check your inbox.");
+
+//     } catch (error) {
+//       alert(error.message);
+//     }
+
+//   });
   
 document
 .getElementById("deleteAccountBtn")
@@ -145,5 +200,25 @@ document
   } catch (error) {
     alert(error.message);
   }
+
+});// PASSWORD VISIBILITY TOGGLE
+const eyes = document.querySelectorAll(".eye");
+
+eyes.forEach(icon => {
+
+  icon.addEventListener("click", () => {
+
+    const targetId = icon.getAttribute("data-target");
+    const input = document.getElementById(targetId);
+
+    if (!input) return;
+
+    if (input.type === "password") {
+      input.type = "text";
+    } else {
+      input.type = "password";
+    }
+
+  });
 
 });}
