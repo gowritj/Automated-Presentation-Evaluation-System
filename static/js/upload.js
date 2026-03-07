@@ -6,9 +6,6 @@ import {
   signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-
-
-
 const form = document.getElementById("uploadForm");
 const videoInput = document.getElementById("videoInput");
 const previewContainer = document.getElementById("previewContainer");
@@ -19,6 +16,9 @@ const removeFileBtn = document.getElementById("removeFile");
 const infoBtn = document.getElementById("infoBtn");
 const infoPanel = document.getElementById("infoPanel");
 
+// UI elements (cleaned: defined once)
+const profilePanel = document.getElementById("profilePanel");
+const profileBtn = document.querySelector(".profile-icon");
 
 //  Only one tag selection logic
 const tagDropdown = document.getElementById("tagDropdown");
@@ -42,7 +42,6 @@ if (tagDropdown) {
   });
 }
 
-
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     window.location.href = "/login";
@@ -56,7 +55,7 @@ onAuthStateChanged(auth, async (user) => {
   if (emailEl) emailEl.textContent = user.email;
   if (nameEl) nameEl.textContent = user.displayName || "User";
 
-  // 🔥 Fetch tags for dropdown
+  // Fetch tags for dropdown
   try {
     const response = await fetch(`/api/get-tags/${user.uid}`);
     const data = await response.json();
@@ -77,7 +76,7 @@ onAuthStateChanged(auth, async (user) => {
     console.error("Error loading tags:", error);
   }
 
-  // 🔥 Fetch profile stats (to update sidebar)
+  //  Fetch profile stats
   try {
     const statsRes = await fetch(`/api/user-stats/${user.uid}`);
     const stats = await statsRes.json();
@@ -131,9 +130,7 @@ if (removeFileBtn) {
   });
 }
 
-
 // INFO BUTTON TOGGLE
-
 
 if (infoBtn) {
   infoBtn.addEventListener("click", (e) => {
@@ -152,10 +149,7 @@ document.addEventListener("click", (e) => {
   }
 });
 
-
 // PROFILE TOGGLE
-
-const profilePanel = document.getElementById("profilePanel");
 
 window.toggleProfile = function () {
   if (!profilePanel) return;
@@ -166,13 +160,11 @@ document.addEventListener("click", (e) => {
   if (!profilePanel) return;
 
   const clickedInsideProfile = profilePanel.contains(e.target);
-  const clickedProfileIcon = e.target.closest(".profile-icon");
 
-  if (!clickedInsideProfile && !clickedProfileIcon) {
+  if (!clickedInsideProfile && !profileBtn.contains(e.target)) {
     profilePanel.classList.remove("open");
   }
 });
-
 
 // FORM SUBMIT TO BACKEND
 
@@ -195,11 +187,9 @@ if (form) {
     const videoTitle =
       document.getElementById("videoTitleInput")?.value || "Untitled";
 
-    // Get tag values
     const dropdownTag = document.getElementById("tagDropdown")?.value;
     const newTag = document.getElementById("newTagInput")?.value.trim();
 
-    // VALIDATION FIX
     if ((!newTag && !dropdownTag) || (newTag && dropdownTag)) {
       alert("Please choose either an existing tag OR create a new tag (not both).");
       return;
@@ -218,15 +208,15 @@ if (form) {
     formData.append("firebase_uid", user.uid);
     formData.append("tag_name", selectedTag);
     formData.append("video_title", videoTitle);
-         const uploadBtn = form.querySelector(".upload-btn");
+
+    const uploadBtn = form.querySelector(".upload-btn");
 
     try {
-      //  Show uploading state
-uploadBtn.disabled = true;
 
-// Show overlay
-const overlay = document.getElementById("uploadOverlay");
-overlay.style.display = "flex";
+      uploadBtn.disabled = true;
+
+      const overlay = document.getElementById("uploadOverlay");
+      overlay.style.display = "flex";
 
       const response = await fetch(
         "/api/upload-video",
@@ -245,8 +235,8 @@ overlay.style.display = "flex";
         return;
       }
 
-      // Redirect to dashboard
-window.location.href = `/analysis?video_id=${data.video_id}`;
+      window.location.href = `/analysis?video_id=${data.video_id}`;
+
     } catch (error) {
       console.error("Upload error:", error);
       alert("Upload failed.");

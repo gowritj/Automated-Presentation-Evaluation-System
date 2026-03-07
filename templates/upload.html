@@ -2,29 +2,25 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Upload Presentation</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- CSS -->
   <link rel="stylesheet" href="../static/css/upload.css">
 
-  <!-- Google Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Tektur:wght@400..900&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/png" sizes="32x32"
-          href="{{ url_for('static', filename='assests/logo.png') }}">
+
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='assests/logo.png') }}">
 </head>
 
 <body>
 
-  <!-- Background Video -->
   <video class="bg-video" autoplay muted loop playsinline>
     <source src="../static/assests/flow_gradient_remix.webm" type="video/webm">
   </video>
 
-  <!-- NAVBAR -->
   <header class="navbar">
     <div class="navbar-left">
       <div class="logo">
@@ -40,13 +36,13 @@
     </div>
   </header>
 
-  <!-- PROFILE PANEL -->
   <aside class="profile-panel" id="profilePanel">
     <h3>Your Profile</h3>
+
     <p><strong>Name:</strong> <span id="userName">New User</span></p>
     <p><strong>Email:</strong> <span id="userEmail">user@email.com</span></p>
 
-    <hr />
+    <hr>
 
     <p>Tags Created: <span id="profileTagCount">0</span></p>
     <p>Videos Uploaded: <span id="profileVideoCount">0</span></p>
@@ -55,20 +51,30 @@
     <button class="profile-btn logout" onclick="logout()">Logout</button>
   </aside>
 
-  <!-- MAIN PAGE -->
   <div class="page">
     <div class="upload-card">
 
-      <!-- Heading + Info -->
       <div class="heading-row">
         <h1 class="heading">Upload Your Presentation</h1>
+
+        <a href="/existing-user" class="cta-upload-btn">
+          ← Back to Dashboard
+        </a>
+      </div>
+
+      <div class="subtext-row">
+        <p class="subheading">
+          Upload your presentation video to receive AI-powered feedback
+        </p>
+
         <span class="info-btn" id="infoBtn">
-           <img src="../static/assests/Info.svg">
+          <img src="../static/assests/Info.svg">
         </span>
       </div>
 
       <div class="info-panel" id="infoPanel">
         <h4>Recording Guidelines</h4>
+
         <ul>
           <li>Ensure proper lighting on your face</li>
           <li>Keep upper body visible</li>
@@ -78,65 +84,65 @@
         </ul>
       </div>
 
-      <p class="subheading">
-        Upload your presentation video to receive AI-powered feedback
-      </p>
+      <form id="uploadForm">
 
-      <form id="uploadForm" >
-<input type="hidden" name="firebase_uid" id="firebaseUidInput">
-        <!-- FILE INPUT -->
+        <input type="hidden" name="firebase_uid" id="firebaseUidInput">
+
         <label class="file-box">
-          <input type="file" name="video" id="videoInput" accept="video/*" required hidden />
+
+          <input type="file" name="video" id="videoInput" accept="video/*" required hidden>
+
           <div class="file-ui" id="fileUI">
             <div class="cloud">☁️</div>
             <p><strong>Click to choose video</strong></p>
             <span>MP4, MOV supported</span>
           </div>
+
         </label>
 
-        <!-- VIDEO PREVIEW -->
-        <div class="preview-container" id="previewContainer" style="display: none;">
+        <div class="preview-container" id="previewContainer" style="display:none;">
+
           <video id="videoPreview" controls></video>
 
           <div class="file-info">
+
             <span id="fileName" class="file-name"></span>
+
             <button class="icon-btn delete-video-btn" id="removeFile" type="button">
+
               <img src="../static/assests/delete2.svg" alt="Delete Video">
+
             </button>
+
           </div>
         </div>
 
-        <!-- INPUTS -->
-        <!-- TAG SECTION -->
-<div class="input-group tag-section">
+        <div class="input-group tag-section">
 
-  <label>Select Person (Tag)</label>
+          <label>Select Person (Tag)</label>
 
-  <!-- Dropdown -->
-  <select id="tagDropdown" name="tag_name">
-    <option value="">Select existing tag</option>
-    
-  </select>
+          <select id="tagDropdown" name="tag_name">
+            <option value="">Select existing tag</option>
+          </select>
 
-  <!-- Divider -->
-  <div class="tag-divider">
-    <span>or</span>
-  </div>
+          <div class="tag-divider">
+            <span>or</span>
+          </div>
 
-  <!-- Create New Tag -->
-  <div class="new-tag-row">
-    <input type="text" id="newTagInput" placeholder="Create new tag" />
-  </div>
+          <div class="new-tag-row">
+            <input type="text" id="newTagInput" placeholder="Create new tag">
+          </div>
 
-</div>
-
-
-        <div class="input-group">
-          <label>Video Title</label>
-          <input type="text" name="video_name" placeholder="Eg: Project Review" id="videoTitleInput" required />
         </div>
 
-        <!-- BUTTON -->
+        <div class="input-group">
+
+          <label>Video Title</label>
+
+          <input type="text" name="video_name" placeholder="Eg: Project Review" id="videoTitleInput" required>
+
+        </div>
+
         <button type="submit" class="upload-btn">
           Upload & Analyze →
         </button>
@@ -145,14 +151,19 @@
     </div>
   </div>
 
-  <!-- JS -->
-   <div id="uploadOverlay" class="upload-overlay">
-  <div class="loader-box">
-    <div class="spinner"></div>
-    <p>Uploading & Analyzing your video...</p>
+  <div id="uploadOverlay" class="upload-overlay">
+
+    <div class="loader-box">
+
+      <div class="spinner"></div>
+
+      <p>Uploading & Analyzing your video...</p>
+
+    </div>
   </div>
-</div>
+
   <script type="module" src="../static/js/upload.js"></script>
 
 </body>
+
 </html>

@@ -201,24 +201,25 @@ document
     alert(error.message);
   }
 
-});// PASSWORD VISIBILITY TOGGLE
-const eyes = document.querySelectorAll(".eye");
+});
 
-eyes.forEach(icon => {
-
-  icon.addEventListener("click", () => {
-
-    const targetId = icon.getAttribute("data-target");
-    const input = document.getElementById(targetId);
-
-    if (!input) return;
-
-    if (input.type === "password") {
-      input.type = "text";
-    } else {
-      input.type = "password";
-    }
-
+  // PASSWORD VISIBILITY TOGGLE
+  const eyes = document.querySelectorAll(".eye");
+  
+  eyes.forEach(icon => {
+    icon.addEventListener("click", () => {
+      const targetId = icon.getAttribute("data-target");
+      const input = document.getElementById(targetId);
+      
+      if (!input) return;
+      
+      if (input.type === "password") {
+        input.type = "text";
+        icon.src = "../static/assests/Eye off.svg";
+      } else {
+        input.type = "password";
+        icon.src = "../static/assests/Eye.svg";
+      }
+    });
   });
-
-});}
+}

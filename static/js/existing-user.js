@@ -91,13 +91,22 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
+
+/* =========================
+   UI ELEMENTS
+========================== */
+
+const sidebar = document.getElementById("sidebar");
+const profile = document.getElementById("profilePanel");
+const sidebarBtn = document.querySelector(".menu-icon");
+const profileBtn = document.querySelector(".profile-icon");
+
+
 /* =========================
    SIDEBAR TOGGLE
 ========================== */
 
 window.toggleSidebar = function () {
-  const sidebar = document.getElementById("sidebar");
-  const profile = document.getElementById("profilePanel");
 
   const isOpen = sidebar.classList.contains("active");
 
@@ -109,6 +118,7 @@ window.toggleSidebar = function () {
   if (!isOpen) {
     sidebar.classList.add("active");
   }
+
 };
 
 
@@ -117,8 +127,6 @@ window.toggleSidebar = function () {
 ========================== */
 
 window.toggleProfile = function () {
-  const sidebar = document.getElementById("sidebar");
-  const profile = document.getElementById("profilePanel");
 
   const isOpen = profile.classList.contains("active");
 
@@ -130,7 +138,9 @@ window.toggleProfile = function () {
   if (!isOpen) {
     profile.classList.add("active");
   }
+
 };
+
 
 /* =========================
    LOGOUT FUNCTION
@@ -145,10 +155,31 @@ window.logout = function () {
       alert(error.message);
     });
 };
-// LOAD EDIT PROFILE MODAL
-// LOAD EDIT PROFILE MODAL
+
+
+/* =========================
+   LOAD EDIT PROFILE MODAL
+========================== */
+
 import { loadEditProfileModal } from "./loadModal.js";
 
 document.addEventListener("DOMContentLoaded", () => {
   loadEditProfileModal();
+});
+
+
+/* =========================
+   CLOSE PANELS WHEN CLICKING OUTSIDE
+========================== */
+
+document.addEventListener("click", function (event) {
+
+  if (!sidebar.contains(event.target) && !sidebarBtn.contains(event.target)) {
+    sidebar.classList.remove("active");
+  }
+
+  if (!profile.contains(event.target) && !profileBtn.contains(event.target)) {
+    profile.classList.remove("active");
+  }
+
 });

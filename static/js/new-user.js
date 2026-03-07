@@ -4,13 +4,14 @@ import {
   signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-onAuthStateChanged(auth, async(user) => {
+onAuthStateChanged(auth, async (user) => {
   if (!user) {
     window.location.href = "/login";
   } else {
     document.getElementById("userEmail").textContent = user.email;
     document.getElementById("userName").textContent = user.displayName || "User";
-     try {
+
+    try {
       const response = await fetch(`/api/user-stats/${user.uid}`);
       const data = await response.json();
 
@@ -21,7 +22,6 @@ onAuthStateChanged(auth, async(user) => {
       console.error("Error fetching stats:", error);
     }
   }
-
 });
 
 // LOGOUT
@@ -31,10 +31,12 @@ window.logout = function () {
   });
 };
 
-   //UI TOGGLES (RIGHT SIDE)
+// UI TOGGLES (RIGHT SIDE)
 
 const sidebar = document.getElementById("sidebar");
 const profilePanel = document.getElementById("profilePanel");
+const sidebarBtn = document.querySelector(".menu-icon");
+const profileBtn = document.querySelector(".profile-icon");
 
 // OPEN / CLOSE TAGS
 window.toggleSidebar = function () {
@@ -49,21 +51,22 @@ window.toggleProfile = function () {
 };
 
 document.addEventListener("click", (e) => {
+
   const clickedInsideSidebar = sidebar.contains(e.target);
   const clickedInsideProfile = profilePanel.contains(e.target);
-  const clickedMenuIcon = e.target.closest(".menu-icon");
-  const clickedProfileIcon = e.target.closest(".profile-icon");
 
   if (
     !clickedInsideSidebar &&
     !clickedInsideProfile &&
-    !clickedMenuIcon &&
-    !clickedProfileIcon
+    !sidebarBtn.contains(e.target) &&
+    !profileBtn.contains(e.target)
   ) {
     sidebar.classList.remove("open");
     profilePanel.classList.remove("open");
   }
+
 });
+
 // LOAD EDIT PROFILE MODAL
 import { loadEditProfileModal } from "./loadModal.js";
 

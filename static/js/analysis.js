@@ -5,6 +5,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 /* =========================
+   UI ELEMENTS
+========================== */
+
+const profilePanel = document.getElementById("profilePanel");
+const profileBtn = document.querySelector(".profile-icon");
+
+/* =========================
    AUTH PROTECTION
 ========================== */
 
@@ -24,38 +31,37 @@ onAuthStateChanged(auth, (user) => {
 
     const uid = user.uid;
     const params = new URLSearchParams(window.location.search);
-const videoId = params.get("d");
- 
+    const videoId = params.get("video_id");
+
     fetch(`/api/video-analysis?video_id=${videoId}`)
-  .then(res => res.json())
-  .then(data => {
-      console.log("Video Analysis:", data);
+      .then(res => res.json())
+      .then(data => {
+        console.log("Video Analysis:", data);
 
-      // Example: Update page elements
-      document.getElementById("videoTitle").textContent = data.title;
-      document.getElementById("confidenceScore").textContent = data.overall_score + "%";
-      document.getElementById("fillerScore").textContent = data.filler_words;
-      document.getElementById("postureScore").textContent = data.posture_score;
-      document.getElementById("eyeScore").textContent = data.eye_contact_score;
-      document.getElementById("gestureScore").textContent = data.gesture_score;
-  });
-  fetch(`/api/user-stats/${uid}`)
-  .then(res => res.json())
-  .then(stats => {
+        document.getElementById("videoTitle").textContent = data.title;
+        document.getElementById("confidenceScore").textContent = data.overall_score + "%";
+        document.getElementById("fillerScore").textContent = data.filler_words;
+        document.getElementById("postureScore").textContent = data.posture_score;
+        document.getElementById("eyeScore").textContent = data.eye_contact_score;
+        document.getElementById("gestureScore").textContent = data.gesture_score;
+      });
 
-    const profileVideo = document.getElementById("profileVideoCount");
-    const profileTag = document.getElementById("profileTagCount");
+    fetch(`/api/user-stats/${uid}`)
+      .then(res => res.json())
+      .then(stats => {
 
-    if (profileVideo) {
-      profileVideo.textContent = stats.video_count;
-    }
+        const profileVideo = document.getElementById("profileVideoCount");
+        const profileTag = document.getElementById("profileTagCount");
 
-    if (profileTag) {
-      profileTag.textContent = stats.tag_count;
-    }
+        if (profileVideo) {
+          profileVideo.textContent = stats.video_count;
+        }
 
-  });
+        if (profileTag) {
+          profileTag.textContent = stats.tag_count;
+        }
 
+      });
 
   } else {
     window.location.href = "/login";
@@ -67,16 +73,34 @@ const videoId = params.get("d");
 ========================== */
 
 window.toggleProfile = function () {
-  const profile = document.getElementById("profilePanel");
 
-  const isOpen = profile.classList.contains("active");
+  if (!profilePanel) return;
 
-  profile.classList.remove("active");
+  const isOpen = profilePanel.classList.contains("active");
+
+  profilePanel.classList.remove("active");
 
   if (!isOpen) {
-    profile.classList.add("active");
+    profilePanel.classList.add("active");
   }
+
 };
+
+/* =========================
+   CLOSE PROFILE WHEN CLICKING OUTSIDE
+========================== */
+
+document.addEventListener("click", (e) => {
+
+  if (!profilePanel) return;
+
+  const clickedInsideProfile = profilePanel.contains(e.target);
+
+  if (!clickedInsideProfile && !profileBtn.contains(e.target)) {
+    profilePanel.classList.remove("active");
+  }
+
+});
 
 /* =========================
    LOGOUT FUNCTION
