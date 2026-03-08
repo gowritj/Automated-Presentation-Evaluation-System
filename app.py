@@ -5,6 +5,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 import random
+import tempfile
+import shutil
 import cloudinary
 import cloudinary.uploader
 import whisper
@@ -101,32 +103,53 @@ class Analysis(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-def download_video(url, filename):
+def process_video_from_cloudinary(video_url):
 
-    response = requests.get(url)
+    # download video
+    response = requests.get(video_url, stream=True)
 
-    with open(filename, "wb") as f:
-        f.write(response.content)
+    temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
 
-    return filename
-def extract_audio(video_path):
+    for chunk in response.iter_content(chunk_size=8192):
+        temp_video.write(chunk)
 
+    temp_video.close()   # IMPORTANT: close before ffmpeg reads it
+
+    video_path = temp_video.name
+
+    # process video
     video = VideoFileClip(video_path)
 
-    audio_path = "audio.wav"
-
+    temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    audio_path = temp_audio.name
+    temp_audio.close()
+    if video.audio is None:
+        video.close()
+        os.remove(video_path)
+        return "", duration, True   # True means silent video
+    video.audio.write_audiofile(audio_path)
     video.audio.write_audiofile(audio_path)
 
-    duration = video.duration
+    audio = video.audio
+    volume = audio.max_volume()
 
-    return audio_path, duration
-def speech_to_text(audio_path):
+    if volume < 0.01:
+        silent = True
+    else:
+        silent = False
+    duration = video.duration
+    video.close()
 
     result = model.transcribe(audio_path)
-
     text = result["text"]
 
-    return text
+    # cleanup
+    os.remove(video_path)
+    os.remove(audio_path)
+
+    return text, duration,silent
+
+
 def evaluate_text(text, duration):
 
     words = text.split()
@@ -204,29 +227,21 @@ def upload_video():
     db.session.add(new_video)
     db.session.commit()
 
-    # Dummy Analysis
-    # Download video
-    print("Downloading video...")
+    print("Processing video from Cloudinary...")
 
-    video_path = download_video(cloudinary_url, "video.mp4")
-    print("Extracting audio...")
-
-    # Extract audio
-    audio_path, duration = extract_audio(video_path)
-    print("Transcribing speech...")
-
-    # Convert speech to text
-    text = speech_to_text(audio_path)
-    text = speech_to_text(audio_path)
-
+    text, duration, silent = process_video_from_cloudinary(cloudinary_url)
     print("----------- EXTRACTED TEXT -----------")
     print(text)
     print("--------------------------------------")
     # Evaluate speech
     print("Evaluating text...")
-
-    speech_rate, filler_words = evaluate_text(text, duration)
-
+    
+    if silent:
+        speech_rate = 0
+        filler_words = 0
+    else:
+        speech_rate, filler_words = evaluate_text(text, duration)
+    
     # Temporary body scores (still random)
     posture_score = round(random.uniform(60, 95), 2)
     eye_contact_score = round(random.uniform(60, 95), 2)
