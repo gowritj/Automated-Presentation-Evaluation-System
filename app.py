@@ -12,6 +12,9 @@ import cloudinary.uploader
 import whisper
 from moviepy import VideoFileClip
 import requests
+import cv2
+import mediapipe as mp
+import numpy as np
 load_dotenv()
 
 #  Configure Cloudinary
@@ -30,11 +33,7 @@ CORS(app)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "connect_args": {
-        "sslmode": "require"
-    }
-}
+
 
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "connect_args": {
@@ -114,40 +113,45 @@ def process_video_from_cloudinary(video_url):
         temp_video.write(chunk)
 
     temp_video.close()   # IMPORTANT: close before ffmpeg reads it
+    try:
+        video_path = temp_video.name
+        # 🔥 NEW: posture + gesture
+        posture_score = calculate_posture(video_path)
+        gesture_score = calculate_gesture(video_path)
+        # process video
+        video = VideoFileClip(video_path)
 
-    video_path = temp_video.name
+        temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        audio_path = temp_audio.name
+        temp_audio.close()
+        if video.audio is None:
+            duration = video.duration
+            video.close()
+            os.remove(video_path)
+            return "", duration, True, posture_score, gesture_score   # True means silent video
+        video.audio.write_audiofile(audio_path)
 
-    # process video
-    video = VideoFileClip(video_path)
+        audio = video.audio
+        volume = audio.max_volume()
 
-    temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    audio_path = temp_audio.name
-    temp_audio.close()
-    if video.audio is None:
+        if volume < 0.01:
+            silent = True
+        else:
+            silent = False
+        duration = video.duration
         video.close()
-        os.remove(video_path)
-        return "", duration, True   # True means silent video
-    video.audio.write_audiofile(audio_path)
-    video.audio.write_audiofile(audio_path)
 
-    audio = video.audio
-    volume = audio.max_volume()
+        result = model.transcribe(audio_path)
+        text = result["text"]
 
-    if volume < 0.01:
-        silent = True
-    else:
-        silent = False
-    duration = video.duration
-    video.close()
+        # cleanup
+        
+        os.remove(audio_path)
 
-    result = model.transcribe(audio_path)
-    text = result["text"]
-
-    # cleanup
-    os.remove(video_path)
-    os.remove(audio_path)
-
-    return text, duration,silent
+        return text, duration,silent,posture_score, gesture_score
+    finally:
+        if os.path.exists(video_path):
+            os.remove(video_path)
 
 
 def evaluate_text(text, duration):
@@ -166,6 +170,262 @@ def evaluate_text(text, duration):
         filler_words += text.lower().count(word)
 
     return speech_rate, filler_words
+
+
+def calculate_posture(video_path):
+    mp_pose = mp.solutions.pose
+    pose = mp_pose.Pose()
+
+    cap = cv2.VideoCapture(video_path)
+
+    posture_scores = []
+    slouch_frames = 0
+    total_frames = 0
+
+    prev_shoulder_y = None
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        total_frames += 1
+
+        if total_frames % 10 != 0:
+            continue
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = pose.process(rgb)
+
+        if results.pose_landmarks:
+            lm = results.pose_landmarks.landmark
+
+            left_shoulder = lm[11]
+            right_shoulder = lm[12]
+            left_hip = lm[23]
+            right_hip = lm[24]
+            nose = lm[0]
+
+            score = 0
+
+            # -----------------------------
+            # 1️⃣ Shoulder alignment (30%)
+            # -----------------------------
+            shoulder_diff = abs(left_shoulder.y - right_shoulder.y)
+
+            if shoulder_diff < 0.04:
+                score += 30
+            elif shoulder_diff < 0.08:
+                score += 15
+
+            # -----------------------------
+            # 2️⃣ Head alignment (20%)
+            # -----------------------------
+            mid_x = (left_shoulder.x + right_shoulder.x) / 2
+            head_offset = abs(nose.x - mid_x)
+
+            if head_offset < 0.04:
+                score += 20
+            elif head_offset < 0.08:
+                score += 10
+
+            # -----------------------------
+            # 3️⃣ Slouch Detection (SPINE ANGLE) (30%)
+            # -----------------------------
+            shoulder_mid = np.array([
+                (left_shoulder.x + right_shoulder.x) / 2,
+                (left_shoulder.y + right_shoulder.y) / 2
+            ])
+
+            hip_mid = np.array([
+                (left_hip.x + right_hip.x) / 2,
+                (left_hip.y + right_hip.y) / 2
+            ])
+
+            spine_vector = hip_mid - shoulder_mid
+            vertical_vector = np.array([0, 1])
+
+            cos_angle = np.dot(spine_vector, vertical_vector) / (
+                np.linalg.norm(spine_vector) * np.linalg.norm(vertical_vector) + 1e-6
+            )
+
+            angle = np.degrees(np.arccos(cos_angle))
+
+            if angle < 10:
+                score += 30
+            elif angle < 20:
+                score += 15
+            else:
+                slouch_frames += 1
+
+           
+            # 4️⃣ Lean detection (10%)
+            
+            lean = abs(nose.z - ((left_hip.z + right_hip.z) / 2))
+
+            if lean < 0.1:
+                score += 10
+            elif lean < 0.2:
+                score += 5
+
+           
+            # 5️⃣ Stability (10%)
+            
+            shoulder_mid_y = (left_shoulder.y + right_shoulder.y) / 2
+
+            if prev_shoulder_y is not None:
+                movement = abs(shoulder_mid_y - prev_shoulder_y)
+
+                if movement < 0.01:
+                    score += 10
+                elif movement < 0.03:
+                    score += 5
+
+            prev_shoulder_y = shoulder_mid_y
+
+            posture_scores.append(score)
+
+    cap.release()
+
+    if not posture_scores:
+        return 0, 0
+    final_score = float(np.mean(posture_scores))
+    slouch_ratio = (slouch_frames / total_frames) * 100
+
+    #  Apply slouch penalty
+  
+    if slouch_ratio < 10:
+        penalty = 0
+    elif slouch_ratio < 30:
+        penalty = 5
+    elif slouch_ratio < 50:
+        penalty = 10
+    else:
+        penalty = 20
+
+    final_score = final_score - penalty
+
+    # keep score within 0–100
+    final_score = max(0, min(100, final_score))
+
+    return round(final_score, 2)
+
+
+def calculate_gesture(video_path):
+    mp_hands = mp.solutions.hands
+    hands = mp_hands.Hands(max_num_hands=2)
+
+    cap = cv2.VideoCapture(video_path)
+
+    total_frames = 0
+    gesture_frames = 0
+    movement_values = []
+    active_frames = 0
+    spread_values = []
+
+    prev_positions = []
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        total_frames += 1
+
+        if total_frames % 10 != 0:
+            continue
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = hands.process(rgb)
+
+        current_positions = []
+
+        if results.multi_hand_landmarks:
+            gesture_frames += 1
+
+            for hand in results.multi_hand_landmarks:
+                x = hand.landmark[0].x
+                y = hand.landmark[0].y
+                current_positions.append(np.array([x, y]))
+
+            # Movement tracking
+        
+            if prev_positions and current_positions:
+                for i in range(min(len(prev_positions), len(current_positions))):
+                    movement = np.linalg.norm(current_positions[i] - prev_positions[i])
+                    movement_values.append(movement)
+
+                    if movement > 0.02:
+                        active_frames += 1
+
+            # Hand spread (distance between hands)
+            
+            if len(current_positions) == 2:
+                spread = np.linalg.norm(current_positions[0] - current_positions[1])
+                spread_values.append(spread)
+
+        prev_positions = current_positions
+
+    cap.release()
+
+    if total_frames == 0:
+        return 0
+
+    #  Presence Score (30%)
+  
+    presence_score = (gesture_frames / total_frames) * 100
+
+    #  Movement Score (25%)
+
+    if movement_values:
+        movement_score = (active_frames / total_frames) * 100
+    else:
+        movement_score = 0
+
+    # Movement Quality (20%)
+   
+    if movement_values:
+        avg_movement = np.mean(movement_values)
+
+        if 0.02 < avg_movement < 0.08:
+            quality_score = 100   # ideal
+        elif avg_movement < 0.02:
+            quality_score = 40    # too static
+        else:
+            quality_score = 50    # too shaky
+    else:
+        quality_score = 0
+
+   #Gesture Frequency (15%)
+  
+    frequency_score = min(100, (gesture_frames / (total_frames * 0.6)) * 100)
+
+    # Hand Spread (10%)
+   
+    if spread_values:
+        avg_spread = np.mean(spread_values)
+
+        if avg_spread > 0.2:
+            spread_score = 100   # expressive
+        elif avg_spread > 0.1:
+            spread_score = 60
+        else:
+            spread_score = 30    # closed hands
+    else:
+        spread_score = 20
+
+    # FINAL SCORE
+    
+    final_score = (
+        0.3 * presence_score +
+        0.25 * movement_score +
+        0.2 * quality_score +
+        0.15 * frequency_score +
+        0.1 * spread_score
+    )
+
+    return float(round(final_score, 2))
+
 
 # ROUTES
 
@@ -229,7 +489,7 @@ def upload_video():
 
     print("Processing video from Cloudinary...")
 
-    text, duration, silent = process_video_from_cloudinary(cloudinary_url)
+    text, duration, silent, posture_score, gesture_score = process_video_from_cloudinary(cloudinary_url)
     print("----------- EXTRACTED TEXT -----------")
     print(text)
     print("--------------------------------------")
@@ -243,23 +503,22 @@ def upload_video():
         speech_rate, filler_words = evaluate_text(text, duration)
     
     # Temporary body scores (still random)
-    posture_score = round(random.uniform(60, 95), 2)
+    
     eye_contact_score = round(random.uniform(60, 95), 2)
-    gesture_score = round(random.uniform(60, 95), 2)
-
+   
     overall_score = round(
         (posture_score + eye_contact_score + gesture_score) / 3,
         2
     )
 
     analysis = Analysis(
-        video_id=new_video.id,
-        speech_rate=round(speech_rate,2),
-        filler_words=filler_words,
-        posture_score=posture_score,
-        eye_contact_score=eye_contact_score,
-        gesture_score=gesture_score,
-        overall_score=overall_score
+    video_id=new_video.id,
+    speech_rate=float(round(speech_rate, 2)),
+    filler_words=int(filler_words),
+    posture_score=float(posture_score),
+    eye_contact_score=float(eye_contact_score),
+    gesture_score=float(gesture_score),
+    overall_score=float(overall_score)
     )
 
     db.session.add(analysis)
