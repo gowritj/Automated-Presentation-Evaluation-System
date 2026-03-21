@@ -22,7 +22,7 @@ body {
   background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(14px);
   border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
   position: relative;
 }
 
@@ -45,7 +45,7 @@ body {
   margin-bottom: 28px;
 }
 
-.heading-row > h1 {
+.heading-row>h1 {
   margin: 0;
   font-size: 35px;
 }
@@ -58,7 +58,7 @@ body {
   margin-bottom: 20px;
 }
 
-.subtext-row > p {
+.subtext-row>p {
   margin: 0;
   font-size: 16px;
 }
@@ -79,23 +79,71 @@ body {
   position: absolute;
   top: 60px;
   right: 0;
-  width: 260px;
-  background: rgba(10, 20, 50, 0.95);
+  width: 300px;
+  max-height: 520px;
+  overflow-y: auto;
+  background: rgba(6, 32, 65, 0.98);
   padding: 16px;
   border-radius: 12px;
   display: none;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
   z-index: 20;
-}
-
-.info-panel ul {
-  padding-left: 18px;
-  font-size: 13px;
-  color: #cbd5f5;
+  border: 1px solid rgba(203, 213, 245, 0.15);
 }
 
 .info-panel.open {
   display: block;
+}
+
+.info-panel h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #cbd5f5;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(203, 213, 245, 0.15);
+  padding-bottom: 10px;
+}
+
+.guideline-section {
+  margin-bottom: 12px;
+}
+
+.guideline-category {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #a5b4fc;
+}
+
+.info-panel ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.7;
+}
+
+.info-panel ul li {
+  margin-bottom: 2px;
+}
+
+/* scrollbar styling for the panel */
+.info-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.info-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.info-panel::-webkit-scrollbar-thumb {
+  background: rgba(203, 213, 245, 0.2);
+  border-radius: 4px;
+}
+
+.info-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(203, 213, 245, 0.4);
 }
 
 /* BACK BUTTON */
@@ -125,7 +173,7 @@ body {
 }
 
 .file-ui {
-  border: 2px dashed rgba(255,255,255,0.25);
+  border: 2px dashed rgba(255, 255, 255, 0.25);
   border-radius: 12px;
   padding: 24px;
   text-align: center;
@@ -134,7 +182,7 @@ body {
 
 .file-ui:hover {
   border-color: #cbd5f5;
-  background: rgba(56,189,248,0.05);
+  background: rgba(56, 189, 248, 0.05);
 }
 
 .cloud {
@@ -207,7 +255,7 @@ body {
   border-radius: 8px;
   border: none;
   outline: none;
-  background: rgba(255,255,255,0.12);
+  background: rgba(255, 255, 255, 0.12);
   color: white;
 }
 
@@ -373,7 +421,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  z-index:-1;
+  z-index: -1;
 }
 
 /* PROFILE PANEL */
@@ -435,7 +483,7 @@ body {
 .spinner {
   width: 70px;
   height: 70px;
-  border: 6px solid rgba(255,255,255,0.2);
+  border: 6px solid rgba(255, 255, 255, 0.2);
   border-top: 6px solid #cbd5f5;
   border-radius: 50%;
   animation: spin 1s linear infinite;
