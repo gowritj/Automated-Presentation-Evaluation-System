@@ -97,6 +97,7 @@ class Analysis(db.Model):
     gesture_score = db.Column(db.Float)
     overall_score = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    duration = db.Column(db.Float)
 
 
 # ─────────────────────────────────────────
@@ -598,6 +599,57 @@ def calculate_eye_contact(video_path):
     return round(float(score), 2)
 
 
+def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score, gesture_score, duration):
+    feedback = {}
+    
+    # speech rate
+    if speech_rate <= 0:
+        feedback["speech_rate"] = {"status": "warning", "msg": "No speech detected."}
+    elif speech_rate < 80:
+        feedback["speech_rate"] = {"status": "bad", "msg": f"Too slow at {round(speech_rate)} WPM. Aim for 120–150 WPM."}
+    elif speech_rate <= 150:
+        feedback["speech_rate"] = {"status": "good", "msg": f"Great pace at {round(speech_rate)} WPM."}
+    elif speech_rate <= 190:
+        feedback["speech_rate"] = {"status": "warning", "msg": f"A bit fast at {round(speech_rate)} WPM. Try slowing down to 120–150 WPM."}
+    else:
+        feedback["speech_rate"] = {"status": "bad", "msg": f"Too fast at {round(speech_rate)} WPM. Slow down significantly."}
+
+    # filler words
+    fillers_per_min = round(filler_words / (duration / 60), 1) if duration > 0 else 0
+    if fillers_per_min < 1:
+        feedback["filler"] = {"status": "good", "msg": f"Excellent — only {filler_words} filler words."}
+    elif fillers_per_min < 3:
+        feedback["filler"] = {"status": "warning", "msg": f"{filler_words} filler words ({fillers_per_min}/min). Try to reduce."}
+    else:
+        feedback["filler"] = {"status": "bad", "msg": f"Too many filler words — {filler_words} ({fillers_per_min}/min)."}
+
+    # posture
+    if posture_score >= 80:
+        feedback["posture"] = {"status": "good", "msg": "Great posture throughout."}
+    elif posture_score >= 55:
+        feedback["posture"] = {"status": "warning", "msg": "Posture was okay but could be more upright."}
+    else:
+        feedback["posture"] = {"status": "bad", "msg": "Poor posture detected. Sit upright and keep shoulders level."}
+
+    # eye contact
+    if eye_contact_score >= 80:
+        feedback["eye_contact"] = {"status": "good", "msg": "Strong eye contact with the camera."}
+    elif eye_contact_score >= 55:
+        feedback["eye_contact"] = {"status": "warning", "msg": "Eye contact was inconsistent. Look at the camera more."}
+    else:
+        feedback["eye_contact"] = {"status": "bad", "msg": "Poor eye contact. Avoid looking at notes or screen."}
+
+    # gesture
+    if gesture_score >= 60:
+        feedback["gesture"] = {"status": "good", "msg": "Good use of hand gestures."}
+    elif gesture_score >= 35:
+        feedback["gesture"] = {"status": "warning", "msg": "Limited gestures. Try using your hands more naturally."}
+    else:
+        feedback["gesture"] = {"status": "bad", "msg": "Very few gestures detected. Engage your hands while speaking."}
+
+    return feedback
+
+
 # ─────────────────────────────────────────
 # ROUTES — VIDEO UPLOAD & ANALYSIS
 # ─────────────────────────────────────────
@@ -701,7 +753,8 @@ def upload_video():
         posture_score=float(posture_score),
         eye_contact_score=float(eye_contact_score),
         gesture_score=float(gesture_score),
-        overall_score=float(overall_score)
+        overall_score=float(overall_score),
+        duration=float(round(duration, 2))
     )
     db.session.add(analysis)
     db.session.commit()
@@ -984,11 +1037,23 @@ def analysis():
     if not video or not video.analysis:
         return "Analysis not found"
 
+    a = video.analysis
+
+    feedback = build_feedback(
+        a.speech_rate,
+        a.filler_words,
+        a.posture_score,
+        a.eye_contact_score,
+        a.gesture_score,
+        a.duration or 60   # fallback to 60 if duration is None (old records)
+    )
+
     return render_template(
         "analysis.html",
         video=video,
-        analysis=video.analysis,
-        tag_name=video.tag.tag_name
+        analysis=a,
+        tag_name=video.tag.tag_name,
+        feedback=feedback
     )
 
 @app.route("/analytics")

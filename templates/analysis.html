@@ -22,37 +22,35 @@
 
     <!-- NAVBAR -->
     <header class="navbar">
-
-    <div class="navbar-left">
-        <div class="logo">
-            <img src="../static/assests/logo.png" alt="PresenLytics Logo">
+        <div class="navbar-left">
+            <div class="logo">
+                <img src="../static/assests/logo.png" alt="PresenLytics Logo">
+            </div>
+            <a href="/index" class="brand">PresenLytics</a>
         </div>
-        <a href="/index" class="brand">PresenLytics</a>
-    </div>
 
-    <div class="navbar-right">
-        <div class="profile-icon" onclick="toggleProfile()">
-            <img src="../static/assests/profile.svg" alt="profile icon">
+        <div class="navbar-right">
+            <div class="profile-icon" onclick="toggleProfile()">
+                <img src="../static/assests/profile.svg" alt="profile icon">
+            </div>
         </div>
-    </div>
-
-</header>
+    </header>
 
     <!-- PROFILE PANEL -->
     <aside class="profile-panel" id="profilePanel">
-    <h3>Your Profile</h3>
+        <h3>Your Profile</h3>
 
-    <p><strong>Name:</strong> <span id="userName">User</span></p>
-    <p><strong>Email:</strong> <span id="userEmail">user@email.com</span></p>
+        <p><strong>Name:</strong> <span id="userName">User</span></p>
+        <p><strong>Email:</strong> <span id="userEmail">user@email.com</span></p>
 
-    <hr />
+        <hr />
 
-    <p>Tags Created: <span id="profileTagCount">0</span></p>
+        <p>Tags Created: <span id="profileTagCount">0</span></p>
         <p>Videos Uploaded: <span id="profileVideoCount">0</span></p>
 
-    <button class="profile-btn" id="openEditProfile">Edit Profile</button>
-    <button class="profile-btn logout" onclick="logout()">Logout</button>
-</aside>
+        <button class="profile-btn" id="openEditProfile">Edit Profile</button>
+        <button class="profile-btn logout" onclick="logout()">Logout</button>
+    </aside>
 
     <!-- MAIN CONTENT -->
     <main class="dashboard">
@@ -76,24 +74,24 @@
 
             <div class="overall-layout">
 
-    <!-- Left Square Box -->
-    <div class="stat-card overall-box">
-        <h2>{{ analysis.overall_score }}%</h2>
-        <p>Overall Confidence Score</p>
-    </div>
+                <!-- Left Square Box -->
+                <div class="stat-card overall-box">
+                    <h2>{{ analysis.overall_score }}%</h2>
+                    <p>Overall Confidence Score</p>
+                </div>
 
-    <!-- Right Video Preview Box -->
-    <div class="video-box">
-        <video controls>
-        <source src="{{ video.cloudinary_url }}" type="video/mp4">
-        Your browser does not support the video tag.        
-        </video>
-    </div>
+                <!-- Right Video Preview Box -->
+                <div class="video-box">
+                    <video controls>
+                        <source src="{{ video.cloudinary_url }}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
 
-</div>
+            </div>
         </section>
 
-        <!-- Metrics -->
+        <!-- Detailed Metrics -->
         <section class="performance-section">
             <h2 class="section-title">Detailed Metrics</h2>
 
@@ -127,10 +125,59 @@
             </div>
         </section>
 
+        <!-- Feedback Section -->
+        <section class="performance-section">
+            <h2 class="section-title">Why this score?</h2>
+
+            <div class="feedback-list">
+
+                <div class="feedback-item {{ feedback.eye_contact.status }}">
+                    <span class="feedback-icon">👁️</span>
+                    <div>
+                        <p class="feedback-label">Eye Contact</p>
+                        <p class="feedback-msg">{{ feedback.eye_contact.msg }}</p>
+                    </div>
+                </div>
+
+                <div class="feedback-item {{ feedback.posture.status }}">
+                    <span class="feedback-icon">🧍</span>
+                    <div>
+                        <p class="feedback-label">Posture</p>
+                        <p class="feedback-msg">{{ feedback.posture.msg }}</p>
+                    </div>
+                </div>
+
+                <div class="feedback-item {{ feedback.speech_rate.status }}">
+                    <span class="feedback-icon">🗣️</span>
+                    <div>
+                        <p class="feedback-label">Speech Rate</p>
+                        <p class="feedback-msg">{{ feedback.speech_rate.msg }}</p>
+                    </div>
+                </div>
+
+                <div class="feedback-item {{ feedback.filler.status }}">
+                    <span class="feedback-icon">🔤</span>
+                    <div>
+                        <p class="feedback-label">Filler Words</p>
+                        <p class="feedback-msg">{{ feedback.filler.msg }}</p>
+                    </div>
+                </div>
+
+                <div class="feedback-item {{ feedback.gesture.status }}">
+                    <span class="feedback-icon">🤙</span>
+                    <div>
+                        <p class="feedback-label">Gestures</p>
+                        <p class="feedback-msg">{{ feedback.gesture.msg }}</p>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
     </main>
 
     <div id="modalContainer"></div>
-    
+
     <script type="module" src="../static/js/analysis.js"></script>
 
 </body>
