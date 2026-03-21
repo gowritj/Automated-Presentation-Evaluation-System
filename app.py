@@ -14,6 +14,8 @@ import requests
 import cv2
 import mediapipe as mp
 import numpy as np
+from groq import Groq
+import json
 load_dotenv()
 
 # ─────────────────────────────────────────
@@ -44,6 +46,9 @@ db = SQLAlchemy(app)
 # Load Whisper once at startup — using tiny model for speed.
 # Upgrade to "base" or "small" for better accuracy at the cost of speed.
 model = whisper.load_model("tiny")
+
+# Groq client for content analysis — free LLM API
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
 # ─────────────────────────────────────────
@@ -98,6 +103,12 @@ class Analysis(db.Model):
     overall_score = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     duration = db.Column(db.Float)
+    vocabulary_score = db.Column(db.Float)       
+    confidence_score = db.Column(db.Float)           
+    topic_relevance_score = db.Column(db.Float) 
+    content_structure_score = db.Column(db.Float)    
+    topic_relevance_reason = db.Column(db.Text)      
+    content_structure_reason = db.Column(db.Text)
 
 
 # ─────────────────────────────────────────
@@ -229,6 +240,100 @@ def score_filler_words(filler_count, duration_seconds):
     else:
         return 20.0
 
+def score_vocabulary(text):
+    """
+    Measures vocabulary richness — unique words / total words.
+    Ideal for presentations is 40-60% unique words.
+    Below 30% is repetitive, above 50% is varied.
+    """
+    words = re.findall(r'\b[a-z]+\b', text.lower())
+    if len(words) == 0:
+        return 0.0
+    unique_ratio = len(set(words)) / len(words)
+    # Linear scale: 0.2 ratio = 0 score, 0.5 ratio = 100 score
+    score = max(0.0, min(100.0, (unique_ratio - 0.2) / (0.5 - 0.2) * 100))
+    return round(score, 2)
+
+
+def score_confidence_language(text, duration_seconds):
+    """
+    Detects weak/hedging language that signals low confidence.
+    Normalised per minute so short and long videos are treated fairly.
+    """
+    weak_phrases = [
+        "i think", "i guess", "i'm not sure", "i am not sure",
+        "maybe", "perhaps", "kind of", "sort of", "i don't know",
+        "i do not know", "a little bit", "i feel like",
+        "probably", "might be", "not really sure"
+    ]
+    text_lower = text.lower()
+    count = sum(text_lower.count(phrase) for phrase in weak_phrases)
+    duration_minutes = duration_seconds / 60 if duration_seconds > 0 else 1
+    per_minute = count / duration_minutes
+
+    if per_minute < 1:
+        return 100.0
+    elif per_minute < 2:
+        return 80.0
+    elif per_minute < 4:
+        return 60.0
+    elif per_minute < 7:
+        return 40.0
+    else:
+        return 20.0
+
+
+def analyse_content_with_groq(transcript, topic):
+    """
+    Sends transcript and topic to Groq for content analysis.
+    Returns topic relevance score, structure score, and one-line reasons.
+    Single API call returns both scores to save on rate limits.
+    Falls back to 0 with error message if API call fails.
+    """
+    prompt = f"""You are an expert presentation coach. Analyse this speech transcript and return a JSON object only — no explanation, no markdown, just raw JSON.
+
+Topic the speaker was supposed to present on: "{topic}"
+
+Transcript:
+{transcript}
+
+Return exactly this JSON structure:
+{{
+  "topic_relevance_score": <0-100 integer>,
+  "topic_relevance_reason": "<one sentence explaining the score>",
+  "content_structure_score": <0-100 integer>,
+  "content_structure_reason": "<one sentence explaining the score>"
+}}
+
+Scoring guide:
+- topic_relevance_score: How well the speech covers the given topic. 90-100 = excellent coverage, 70-89 = good but missing some points, 50-69 = partial coverage, below 50 = mostly off-topic.
+- content_structure_score: Does the speech have a clear intro, body, and conclusion? 90-100 = very clear structure, 70-89 = mostly structured, 50-69 = some structure but disorganised, below 50 = no clear structure."""
+
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.1
+        )
+        raw = response.choices[0].message.content.strip()
+        # Strip markdown code fences if model wraps response in them
+        raw = re.sub(r'```json|```', '', raw).strip()
+        result = json.loads(raw)
+        return {
+            "topic_relevance_score": float(result.get("topic_relevance_score", 0)),
+            "topic_relevance_reason": result.get("topic_relevance_reason", ""),
+            "content_structure_score": float(result.get("content_structure_score", 0)),
+            "content_structure_reason": result.get("content_structure_reason", "")
+        }
+    except Exception as e:
+        print("Groq API error:", e)
+        return {
+            "topic_relevance_score": 0.0,
+            "topic_relevance_reason": "Analysis failed — please try again.",
+            "content_structure_score": 0.0,
+            "content_structure_reason": "Analysis failed — please try again."
+        }
 
 # ─────────────────────────────────────────
 # POSTURE ANALYSIS
@@ -599,10 +704,18 @@ def calculate_eye_contact(video_path):
     return round(float(score), 2)
 
 
-def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score, gesture_score, duration):
+def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score,
+                   gesture_score, duration, vocabulary_score, confidence_score,
+                   topic_relevance_score, content_structure_score,
+                   topic_relevance_reason, content_structure_reason):
+    """
+    Generates human-readable feedback for each metric.
+    Returns a dict with status (good/warning/bad) and msg for each metric.
+    Used to explain to the student why their overall score is what it is.
+    """
     feedback = {}
-    
-    # speech rate
+
+    # Speech rate feedback
     if speech_rate <= 0:
         feedback["speech_rate"] = {"status": "warning", "msg": "No speech detected."}
     elif speech_rate < 80:
@@ -614,16 +727,16 @@ def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score, 
     else:
         feedback["speech_rate"] = {"status": "bad", "msg": f"Too fast at {round(speech_rate)} WPM. Slow down significantly."}
 
-    # filler words
+    # Filler words feedback
     fillers_per_min = round(filler_words / (duration / 60), 1) if duration > 0 else 0
     if fillers_per_min < 1:
-        feedback["filler"] = {"status": "good", "msg": f"Excellent — only {filler_words} filler words."}
+        feedback["filler"] = {"status": "good", "msg": f"Excellent — only {filler_words} filler word(s) detected."}
     elif fillers_per_min < 3:
         feedback["filler"] = {"status": "warning", "msg": f"{filler_words} filler words ({fillers_per_min}/min). Try to reduce."}
     else:
         feedback["filler"] = {"status": "bad", "msg": f"Too many filler words — {filler_words} ({fillers_per_min}/min)."}
 
-    # posture
+    # Posture feedback
     if posture_score >= 80:
         feedback["posture"] = {"status": "good", "msg": "Great posture throughout."}
     elif posture_score >= 55:
@@ -631,7 +744,7 @@ def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score, 
     else:
         feedback["posture"] = {"status": "bad", "msg": "Poor posture detected. Sit upright and keep shoulders level."}
 
-    # eye contact
+    # Eye contact feedback
     if eye_contact_score >= 80:
         feedback["eye_contact"] = {"status": "good", "msg": "Strong eye contact with the camera."}
     elif eye_contact_score >= 55:
@@ -639,7 +752,7 @@ def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score, 
     else:
         feedback["eye_contact"] = {"status": "bad", "msg": "Poor eye contact. Avoid looking at notes or screen."}
 
-    # gesture
+    # Gesture feedback
     if gesture_score >= 60:
         feedback["gesture"] = {"status": "good", "msg": "Good use of hand gestures."}
     elif gesture_score >= 35:
@@ -647,8 +760,41 @@ def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score, 
     else:
         feedback["gesture"] = {"status": "bad", "msg": "Very few gestures detected. Engage your hands while speaking."}
 
-    return feedback
+    # Vocabulary feedback
+    if vocabulary_score >= 70:
+        feedback["vocabulary"] = {"status": "good", "msg": "Great vocabulary variety in your speech."}
+    elif vocabulary_score >= 45:
+        feedback["vocabulary"] = {"status": "warning", "msg": "Vocabulary was okay but try using more varied words."}
+    else:
+        feedback["vocabulary"] = {"status": "bad", "msg": "Speech was repetitive. Try to vary your word choices."}
 
+    # Confidence language feedback
+    if confidence_score >= 80:
+        feedback["confidence"] = {"status": "good", "msg": "You spoke with confidence — minimal hedging language."}
+    elif confidence_score >= 50:
+        feedback["confidence"] = {"status": "warning", "msg": "Some hedging phrases detected. Avoid 'I think', 'maybe', 'kind of'."}
+    else:
+        feedback["confidence"] = {"status": "bad", "msg": "Too much uncertain language. Speak with more conviction."}
+
+    # Topic relevance — use Groq's reason directly
+    if topic_relevance_score >= 75:
+        status = "good"
+    elif topic_relevance_score >= 50:
+        status = "warning"
+    else:
+        status = "bad"
+    feedback["topic_relevance"] = {"status": status, "msg": topic_relevance_reason}
+
+    # Content structure — use Groq's reason directly
+    if content_structure_score >= 75:
+        status = "good"
+    elif content_structure_score >= 50:
+        status = "warning"
+    else:
+        status = "bad"
+    feedback["content_structure"] = {"status": status, "msg": content_structure_reason}
+
+    return feedback
 
 # ─────────────────────────────────────────
 # ROUTES — VIDEO UPLOAD & ANALYSIS
@@ -723,10 +869,23 @@ def upload_video():
     # Guard against silent or near-silent videos producing garbage transcripts
     # Whisper can hallucinate random words on silent/noisy audio
     if silent or len(text.split()) < 10:
-        speech_rate  = 0
-        filler_words = 0
+        speech_rate          = 0
+        filler_words         = 0
+        vocabulary_score     = 0.0
+        confidence_score     = 0.0
+        topic_relevance_score    = 0.0
+        content_structure_score  = 0.0
+        topic_relevance_reason   = "No speech detected."
+        content_structure_reason = "No speech detected."
     else:
         speech_rate, filler_words = evaluate_text(text, duration)
+        vocabulary_score     = score_vocabulary(text)
+        confidence_score     = score_confidence_language(text, duration)
+        content_result       = analyse_content_with_groq(text, video_title)
+        topic_relevance_score    = content_result["topic_relevance_score"]
+        content_structure_score  = content_result["content_structure_score"]
+        topic_relevance_reason   = content_result["topic_relevance_reason"]
+        content_structure_reason = content_result["content_structure_reason"]
 
     # Convert raw metrics to 0-100 scores
     speech_rate_score = score_speech_rate(speech_rate)
@@ -736,15 +895,19 @@ def upload_video():
     # Eye contact is most important (30%), posture second (25%),
     # speech rate third (20%), filler words fourth (15%), gesture least (10%)
     overall_score = round(
-        (
-            eye_contact_score * 0.30 +
-            posture_score     * 0.25 +
-            speech_rate_score * 0.20 +
-            filler_score      * 0.15 +
-            gesture_score     * 0.10
-        ),
-        2
-    )
+    (
+        eye_contact_score       * 0.20 +
+        posture_score           * 0.15 +
+        topic_relevance_score   * 0.15 +
+        speech_rate_score       * 0.10 +
+        filler_score            * 0.10 +
+        vocabulary_score        * 0.10 +
+        confidence_score        * 0.10 +
+        content_structure_score * 0.05 +
+        gesture_score           * 0.05
+    ),
+    2
+)
 
     analysis = Analysis(
         video_id=new_video.id,
@@ -754,7 +917,13 @@ def upload_video():
         eye_contact_score=float(eye_contact_score),
         gesture_score=float(gesture_score),
         overall_score=float(overall_score),
-        duration=float(round(duration, 2))
+        duration=float(round(duration, 2)),
+        vocabulary_score=float(vocabulary_score),
+        confidence_score=float(confidence_score),
+        topic_relevance_score=float(topic_relevance_score),
+        content_structure_score=float(content_structure_score),
+        topic_relevance_reason=topic_relevance_reason,
+        content_structure_reason=content_structure_reason
     )
     db.session.add(analysis)
     db.session.commit()
@@ -1045,7 +1214,13 @@ def analysis():
         a.posture_score,
         a.eye_contact_score,
         a.gesture_score,
-        a.duration or 60   # fallback to 60 if duration is None (old records)
+        a.duration or 60,
+        a.vocabulary_score or 0,
+        a.confidence_score or 0,
+        a.topic_relevance_score or 0,
+        a.content_structure_score or 0,
+        a.topic_relevance_reason or "",
+        a.content_structure_reason or ""
     )
 
     return render_template(

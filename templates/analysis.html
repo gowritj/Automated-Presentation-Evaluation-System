@@ -10,8 +10,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Tektur:wght@400..900&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" sizes="32x32"
-          href="{{ url_for('static', filename='assests/logo.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='assests/logo.png') }}">
 </head>
 
 <body>
@@ -171,6 +170,38 @@
                     </div>
                 </div>
 
+                <div class="feedback-item {{ feedback.vocabulary.status }}">
+                    <span class="feedback-icon">📚</span>
+                    <div>
+                        <p class="feedback-label">Vocabulary</p>
+                        <p class="feedback-msg">{{ feedback.vocabulary.msg }}</p>
+                    </div>
+                </div>
+
+                <div class="feedback-item {{ feedback.confidence.status }}">
+                    <span class="feedback-icon">💪</span>
+                    <div>
+                        <p class="feedback-label">Confidence Language</p>
+                        <p class="feedback-msg">{{ feedback.confidence.msg }}</p>
+                    </div>
+                </div>
+
+                <div class="feedback-item {{ feedback.topic_relevance.status }}">
+                    <span class="feedback-icon">🎯</span>
+                    <div>
+                        <p class="feedback-label">Topic Relevance</p>
+                        <p class="feedback-msg">{{ feedback.topic_relevance.msg }}</p>
+                    </div>
+                </div>
+
+                <div class="feedback-item {{ feedback.content_structure.status }}">
+                    <span class="feedback-icon">🏗️</span>
+                    <div>
+                        <p class="feedback-label">Content Structure</p>
+                        <p class="feedback-msg">{{ feedback.content_structure.msg }}</p>
+                    </div>
+                </div>
+
             </div>
         </section>
 
@@ -181,4 +212,5 @@
     <script type="module" src="../static/js/analysis.js"></script>
 
 </body>
+
 </html>
