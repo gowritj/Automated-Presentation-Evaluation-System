@@ -4,9 +4,8 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from dotenv import load_dotenv
 import os
-import random
+import re
 import tempfile
-import shutil
 import cloudinary
 import cloudinary.uploader
 import whisper
@@ -17,7 +16,9 @@ import mediapipe as mp
 import numpy as np
 load_dotenv()
 
-#  Configure Cloudinary
+# ─────────────────────────────────────────
+# CLOUDINARY CONFIG
+# ─────────────────────────────────────────
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
@@ -27,25 +28,27 @@ cloudinary.config(
 app = Flask(__name__)
 CORS(app)
 
-
+# ─────────────────────────────────────────
 # DATABASE CONFIG
-
-
+# ─────────────────────────────────────────
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
-
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "connect_args": {
         "sslmode": "require"
     }
 }
 
-
 db = SQLAlchemy(app)
 
+# Load Whisper once at startup — using tiny model for speed.
+# Upgrade to "base" or "small" for better accuracy at the cost of speed.
 model = whisper.load_model("tiny")
-# MODELS
+
+
+# ─────────────────────────────────────────
+# DATABASE MODELS
+# ─────────────────────────────────────────
 
 class User(db.Model):
     __tablename__ = "users"
@@ -54,7 +57,7 @@ class User(db.Model):
     firebase_uid = db.Column(db.String(200), unique=True, nullable=False)
     email = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    name = db.Column(db.String(200)) 
+    name = db.Column(db.String(200))
     tags = db.relationship("Tag", backref="user", lazy=True)
     videos = db.relationship("Video", backref="user", lazy=True)
 
@@ -66,7 +69,6 @@ class Tag(db.Model):
     tag_name = db.Column(db.String(200), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
     videos = db.relationship("Video", backref="tag", lazy=True)
 
 
@@ -77,12 +79,9 @@ class Video(db.Model):
     video_title = db.Column(db.String(200))
     cloudinary_url = db.Column(db.Text, nullable=False)
     cloudinary_public_id = db.Column(db.String(200))
-
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     tag_id = db.Column(db.Integer, db.ForeignKey("tags.id"), nullable=False)
-
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
-
     analysis = db.relationship("Analysis", backref="video", uselist=False)
 
 
@@ -91,97 +90,174 @@ class Analysis(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     video_id = db.Column(db.Integer, db.ForeignKey("videos.id"), nullable=False)
-
     speech_rate = db.Column(db.Float)
     filler_words = db.Column(db.Integer)
     posture_score = db.Column(db.Float)
     eye_contact_score = db.Column(db.Float)
     gesture_score = db.Column(db.Float)
     overall_score = db.Column(db.Float)
-
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+# ─────────────────────────────────────────
+# VIDEO PROCESSING — MAIN PIPELINE
+# ─────────────────────────────────────────
+
 def process_video_from_cloudinary(video_url):
+    """
+    Downloads the video from Cloudinary to a temp file,
+    runs all CV pipelines, extracts audio, and returns
+    all raw scores + transcript for further processing.
+    """
 
-    # download video
+    # Download video from Cloudinary to a local temp file
     response = requests.get(video_url, stream=True)
-
     temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-
     for chunk in response.iter_content(chunk_size=8192):
         temp_video.write(chunk)
+    temp_video.close()  # Must close before OpenCV/ffmpeg reads it
 
-    temp_video.close()   # IMPORTANT: close before ffmpeg reads it
     try:
         video_path = temp_video.name
-        # 🔥 NEW: posture + gesture
+
+        # Run all three CV pipelines on the same video file
         posture_score = calculate_posture(video_path)
         gesture_score = calculate_gesture(video_path)
-        # process video
-        video = VideoFileClip(video_path)
+        eye_contact_score = calculate_eye_contact(video_path)
 
+        # Extract audio for Whisper transcription
+        video = VideoFileClip(video_path)
         temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         audio_path = temp_audio.name
         temp_audio.close()
+
+        # Handle videos with no audio track at all
         if video.audio is None:
             duration = video.duration
             video.close()
-            os.remove(video_path)
-            return "", duration, True, posture_score, gesture_score   # True means silent video
+            return "", duration, True, posture_score, gesture_score, eye_contact_score
+
         video.audio.write_audiofile(audio_path)
 
+        # Check if audio is essentially silent (volume too low for Whisper)
         audio = video.audio
         volume = audio.max_volume()
+        silent = volume < 0.01
 
-        if volume < 0.01:
-            silent = True
-        else:
-            silent = False
         duration = video.duration
         video.close()
 
+        # Transcribe audio using Whisper
         result = model.transcribe(audio_path)
         text = result["text"]
 
-        # cleanup
-        
         os.remove(audio_path)
 
-        return text, duration,silent,posture_score, gesture_score
+        return text, duration, silent, posture_score, gesture_score, eye_contact_score
+
     finally:
+        # Always clean up temp video file even if something crashes
         if os.path.exists(video_path):
             os.remove(video_path)
 
 
+# ─────────────────────────────────────────
+# SPEECH ANALYSIS
+# ─────────────────────────────────────────
+
 def evaluate_text(text, duration):
-
+    """
+    Computes speech rate (WPM) and counts filler words
+    from the Whisper transcript.
+    """
     words = text.split()
-
     word_count = len(words)
-
     speech_rate = word_count / (duration / 60)
 
     filler_list = ["um", "uh", "like", "actually", "basically"]
 
+    # Use word boundary regex to avoid false matches
+    # e.g. "like" should not match inside "likewise" or "unlikely"
     filler_words = 0
-
     for word in filler_list:
-        filler_words += text.lower().count(word)
+        filler_words += len(re.findall(rf'\b{word}\b', text.lower()))
 
     return speech_rate, filler_words
 
 
+def score_speech_rate(wpm):
+    """
+    Converts WPM into a 0-100 score using a smooth linear curve.
+    Ideal range is 120-150 WPM.
+    Below 120: score drops linearly to 0 at 60 WPM.
+    Above 150: score drops linearly to 0 at 220 WPM.
+    Above 300: returns 0 — likely a Whisper hallucination on noisy audio.
+    """
+    if wpm <= 0 or wpm > 300:
+        return 0.0
+    if 120 <= wpm <= 150:
+        return 100.0
+    if wpm < 120:
+        # Too slow — linear drop from 100 at 120 WPM to 0 at 60 WPM
+        return max(0.0, round((wpm - 60) / (120 - 60) * 100, 2))
+    # Too fast — linear drop from 100 at 150 WPM to 0 at 220 WPM
+    return max(0.0, round((220 - wpm) / (220 - 150) * 100, 2))
+
+
+def score_filler_words(filler_count, duration_seconds):
+    """
+    Converts filler word count into a 0-100 score.
+    Normalised per minute so short and long videos are treated fairly.
+    < 1 per minute  → 100 (excellent)
+    < 3 per minute  → 80  (good)
+    < 6 per minute  → 60  (acceptable)
+    < 10 per minute → 40  (needs work)
+    10+ per minute  → 20  (poor)
+    """
+    duration_minutes = duration_seconds / 60 if duration_seconds > 0 else 1
+    fillers_per_minute = filler_count / duration_minutes
+
+    if fillers_per_minute < 1:
+        return 100.0
+    elif fillers_per_minute < 3:
+        return 80.0
+    elif fillers_per_minute < 6:
+        return 60.0
+    elif fillers_per_minute < 10:
+        return 40.0
+    else:
+        return 20.0
+
+
+# ─────────────────────────────────────────
+# POSTURE ANALYSIS
+# ─────────────────────────────────────────
+
 def calculate_posture(video_path):
+    """
+    Analyses posture from video using MediaPipe Pose.
+    Designed for seated/half-body webcam recordings —
+    does NOT use hip landmarks which are often out of frame.
+
+    Scoring breakdown per frame (max 100):
+      1. Shoulder alignment  — 30pts
+      2. Head alignment      — 20pts
+      3. Ear-shoulder angle  — 30pts (replaces hip-based spine angle)
+      4. Forward head        — 10pts (replaces z-axis lean)
+      5. Stability           — 10pts
+
+    Samples every 10th frame for performance.
+    Skips frames where key landmarks are low confidence (<0.5).
+    Applies a slouch penalty based on ratio of bad posture frames.
+    """
     mp_pose = mp.solutions.pose
     pose = mp_pose.Pose()
-
     cap = cv2.VideoCapture(video_path)
 
     posture_scores = []
     slouch_frames = 0
     total_frames = 0
-
+    sampled_frames = 0  # only counts frames where landmarks were confidently detected
     prev_shoulder_y = None
 
     while cap.isOpened():
@@ -191,6 +267,7 @@ def calculate_posture(video_path):
 
         total_frames += 1
 
+        # Sample every 10th frame for performance
         if total_frames % 10 != 0:
             continue
 
@@ -200,100 +277,101 @@ def calculate_posture(video_path):
         if results.pose_landmarks:
             lm = results.pose_landmarks.landmark
 
-            left_shoulder = lm[11]
+            left_shoulder  = lm[11]
             right_shoulder = lm[12]
-            left_hip = lm[23]
-            right_hip = lm[24]
-            nose = lm[0]
+            left_ear       = lm[7]
+            right_ear      = lm[8]
+            nose           = lm[0]
 
+            # Skip frame if any key landmark is low confidence
+            # Prevents garbage scores when person moves out of frame
+            if (left_shoulder.visibility < 0.5 or right_shoulder.visibility < 0.5 or
+                    left_ear.visibility < 0.5 or right_ear.visibility < 0.5):
+                continue
+
+            sampled_frames += 1
             score = 0
 
-            # -----------------------------
-            # 1️⃣ Shoulder alignment (30%)
-            # -----------------------------
+            # ─── 1. Shoulder alignment (30%) ───────────────────────
+            # Checks if shoulders are level — tilting sideways loses points
             shoulder_diff = abs(left_shoulder.y - right_shoulder.y)
-
             if shoulder_diff < 0.04:
                 score += 30
             elif shoulder_diff < 0.08:
                 score += 15
 
-            # -----------------------------
-            # 2️⃣ Head alignment (20%)
-            # -----------------------------
+            # ─── 2. Head alignment (20%) ────────────────────────────
+            # Checks if head is centered over shoulders horizontally
             mid_x = (left_shoulder.x + right_shoulder.x) / 2
             head_offset = abs(nose.x - mid_x)
-
             if head_offset < 0.04:
                 score += 20
             elif head_offset < 0.08:
                 score += 10
 
-            # -----------------------------
-            # 3️⃣ Slouch Detection (SPINE ANGLE) (30%)
-            # -----------------------------
+            # ─── 3. Ear-shoulder angle / slouch detection (30%) ─────
+            # Replaces hip-based spine angle for seated webcam use.
+            # The vector from shoulder midpoint to ear midpoint should
+            # point straight up when sitting upright. If slouching forward,
+            # ears drop toward shoulders and the angle increases.
             shoulder_mid = np.array([
                 (left_shoulder.x + right_shoulder.x) / 2,
                 (left_shoulder.y + right_shoulder.y) / 2
             ])
-
-            hip_mid = np.array([
-                (left_hip.x + right_hip.x) / 2,
-                (left_hip.y + right_hip.y) / 2
+            ear_mid = np.array([
+                (left_ear.x + right_ear.x) / 2,
+                (left_ear.y + right_ear.y) / 2
             ])
 
-            spine_vector = hip_mid - shoulder_mid
-            vertical_vector = np.array([0, 1])
+            neck_vector = ear_mid - shoulder_mid
+            vertical_vector = np.array([0, -1])  # upward in image coords (Y increases downward)
 
-            cos_angle = np.dot(spine_vector, vertical_vector) / (
-                np.linalg.norm(spine_vector) * np.linalg.norm(vertical_vector) + 1e-6
+            cos_angle = np.dot(neck_vector, vertical_vector) / (
+                np.linalg.norm(neck_vector) * np.linalg.norm(vertical_vector) + 1e-6
             )
-
+            cos_angle = np.clip(cos_angle, -1.0, 1.0)  # guard against float precision errors
             angle = np.degrees(np.arccos(cos_angle))
 
-            if angle < 10:
+            if angle < 15:
                 score += 30
-            elif angle < 20:
+            elif angle < 25:
                 score += 15
             else:
-                slouch_frames += 1
+                slouch_frames += 1  # counts toward slouch penalty
 
-           
-            # 4️⃣ Lean detection (10%)
-            
-            lean = abs(nose.z - ((left_hip.z + right_hip.z) / 2))
+            # ─── 4. Forward head posture (10%) ──────────────────────
+            # Replaces z-axis lean (unreliable on webcams).
+            # Nose Y should be well above shoulder Y in image coords.
+            # If nose.y approaches shoulder.y, the head is drooping forward.
+            nose_to_shoulder_y = nose.y - (left_shoulder.y + right_shoulder.y) / 2
+            if nose_to_shoulder_y < -0.15:
+                score += 10  # head well above shoulders — good upright posture
+            elif nose_to_shoulder_y < -0.08:
+                score += 5   # slightly low but acceptable
 
-            if lean < 0.1:
-                score += 10
-            elif lean < 0.2:
-                score += 5
-
-           
-            # 5️⃣ Stability (10%)
-            
+            # ─── 5. Stability (10%) ─────────────────────────────────
+            # Penalises excessive swaying or bouncing by tracking
+            # how much shoulder height changes between sampled frames
             shoulder_mid_y = (left_shoulder.y + right_shoulder.y) / 2
-
             if prev_shoulder_y is not None:
                 movement = abs(shoulder_mid_y - prev_shoulder_y)
-
                 if movement < 0.01:
                     score += 10
                 elif movement < 0.03:
                     score += 5
 
             prev_shoulder_y = shoulder_mid_y
-
             posture_scores.append(score)
 
     cap.release()
 
     if not posture_scores:
-        return 0, 0
-    final_score = float(np.mean(posture_scores))
-    slouch_ratio = (slouch_frames / total_frames) * 100
+        return 0.0
 
-    #  Apply slouch penalty
-  
+    final_score = float(np.mean(posture_scores))
+
+    # Apply slouch penalty based on proportion of bad posture frames
+    slouch_ratio = (slouch_frames / sampled_frames) * 100 if sampled_frames else 0
     if slouch_ratio < 10:
         penalty = 0
     elif slouch_ratio < 30:
@@ -304,17 +382,34 @@ def calculate_posture(video_path):
         penalty = 20
 
     final_score = final_score - penalty
-
-    # keep score within 0–100
-    final_score = max(0, min(100, final_score))
+    final_score = max(0, min(100, final_score))  # clamp to 0-100
 
     return round(final_score, 2)
 
 
+# ─────────────────────────────────────────
+# GESTURE ANALYSIS
+# ─────────────────────────────────────────
+
 def calculate_gesture(video_path):
+    """
+    Analyses hand gestures using MediaPipe Hands.
+    Tracks both hands, scoring on presence, movement,
+    movement quality, frequency, and hand spread.
+
+    Scoring breakdown (max 100):
+      Presence score    — 30%  (how often hands are visible)
+      Movement score    — 25%  (how often hands are actively moving)
+      Movement quality  — 20%  (ideal movement range, not too static or shaky)
+      Frequency score   — 15%  (how regularly gestures appear)
+      Hand spread       — 10%  (expressive open gestures vs closed hands)
+
+    Uses average of all 21 landmarks per hand instead of just the wrist,
+    for more accurate movement tracking.
+    Samples every 10th frame for performance.
+    """
     mp_hands = mp.solutions.hands
     hands = mp_hands.Hands(max_num_hands=2)
-
     cap = cv2.VideoCapture(video_path)
 
     total_frames = 0
@@ -322,7 +417,6 @@ def calculate_gesture(video_path):
     movement_values = []
     active_frames = 0
     spread_values = []
-
     prev_positions = []
 
     while cap.isOpened():
@@ -332,34 +426,33 @@ def calculate_gesture(video_path):
 
         total_frames += 1
 
+        # Sample every 10th frame for performance
         if total_frames % 10 != 0:
             continue
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb)
-
         current_positions = []
 
         if results.multi_hand_landmarks:
             gesture_frames += 1
 
             for hand in results.multi_hand_landmarks:
-                x = hand.landmark[0].x
-                y = hand.landmark[0].y
-                current_positions.append(np.array([x, y]))
+                # Use average of all 21 landmarks instead of just wrist (landmark[0])
+                # Gives a more accurate representation of overall hand position
+                xs = [lm.x for lm in hand.landmark]
+                ys = [lm.y for lm in hand.landmark]
+                current_positions.append(np.array([np.mean(xs), np.mean(ys)]))
 
-            # Movement tracking
-        
+            # Track movement between frames
             if prev_positions and current_positions:
                 for i in range(min(len(prev_positions), len(current_positions))):
                     movement = np.linalg.norm(current_positions[i] - prev_positions[i])
                     movement_values.append(movement)
-
                     if movement > 0.02:
                         active_frames += 1
 
-            # Hand spread (distance between hands)
-            
+            # Track spread between both hands when both are visible
             if len(current_positions) == 2:
                 spread = np.linalg.norm(current_positions[0] - current_positions[1])
                 spread_values.append(spread)
@@ -369,114 +462,191 @@ def calculate_gesture(video_path):
     cap.release()
 
     if total_frames == 0:
-        return 0
+        return 0.0
 
-    #  Presence Score (30%)
-  
-    presence_score = (gesture_frames / total_frames) * 100
+    # Use sampled frame count for accurate percentages
+    sampled_frames = total_frames // 10 if total_frames else 1
 
-    #  Movement Score (25%)
+    # Presence: what fraction of sampled frames had hands visible
+    presence_score = (gesture_frames / sampled_frames) * 100
 
-    if movement_values:
-        movement_score = (active_frames / total_frames) * 100
-    else:
-        movement_score = 0
+    # Movement: what fraction of sampled frames had active hand movement
+    movement_score = (active_frames / sampled_frames) * 100 if movement_values else 0
 
-    # Movement Quality (20%)
-   
+    # Movement quality: ideal is smooth, deliberate movement (not static, not shaky)
     if movement_values:
         avg_movement = np.mean(movement_values)
-
         if 0.02 < avg_movement < 0.08:
-            quality_score = 100   # ideal
+            quality_score = 100  # ideal — smooth deliberate gestures
         elif avg_movement < 0.02:
-            quality_score = 40    # too static
+            quality_score = 40   # too static — hands barely moving
         else:
-            quality_score = 50    # too shaky
+            quality_score = 50   # too shaky — excessive nervous movement
     else:
         quality_score = 0
 
-   #Gesture Frequency (15%)
-  
-    frequency_score = min(100, (gesture_frames / (total_frames * 0.6)) * 100)
+    # Frequency: how regularly gestures appear (target ~60% of frames)
+    frequency_score = min(100, (gesture_frames / (sampled_frames * 0.6)) * 100)
 
-    # Hand Spread (10%)
-   
+    # Hand spread: wide open gestures are more expressive than closed hands
     if spread_values:
         avg_spread = np.mean(spread_values)
-
         if avg_spread > 0.2:
-            spread_score = 100   # expressive
+            spread_score = 100  # expressive wide gestures
         elif avg_spread > 0.1:
-            spread_score = 60
+            spread_score = 60   # moderate spread
         else:
-            spread_score = 30    # closed hands
+            spread_score = 30   # hands too close together
     else:
-        spread_score = 20
+        spread_score = 20  # no two-hand gestures detected
 
-    # FINAL SCORE
-    
     final_score = (
-        0.3 * presence_score +
+        0.30 * presence_score +
         0.25 * movement_score +
-        0.2 * quality_score +
+        0.20 * quality_score +
         0.15 * frequency_score +
-        0.1 * spread_score
+        0.10 * spread_score
     )
 
     return float(round(final_score, 2))
 
 
-# ROUTES
+# ─────────────────────────────────────────
+# EYE CONTACT ANALYSIS
+# ─────────────────────────────────────────
 
+def calculate_eye_contact(video_path):
+    """
+    Analyses eye contact using MediaPipe Face Mesh with iris tracking.
+    refine_landmarks=True must be set to enable iris landmarks (468, 473).
+
+    For each sampled frame, checks if both irises are horizontally
+    centered within their eye socket. If the offset from center is
+    small, the person is looking at the camera.
+
+    Iris landmarks: 468 (left), 473 (right)
+    Eye corner landmarks:
+      Left eye:  33 (outer), 133 (inner)
+      Right eye: 362 (outer), 263 (inner)
+
+    Samples every 10th frame for performance.
+    Skips frames where no face is detected.
+    """
+    mp_face_mesh = mp.solutions.face_mesh
+    face_mesh = mp_face_mesh.FaceMesh(
+        refine_landmarks=True,  # REQUIRED — enables iris landmarks 468 and 473
+        max_num_faces=1         # only track the presenter, ignore background faces
+    )
+
+    cap = cv2.VideoCapture(video_path)
+    total_frames = 0
+    sampled_frames = 0
+    eye_contact_frames = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        total_frames += 1
+
+        # Sample every 10th frame for performance
+        if total_frames % 10 != 0:
+            continue
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(rgb)
+
+        if results.multi_face_landmarks:
+            sampled_frames += 1
+            landmarks = results.multi_face_landmarks[0].landmark
+
+            # Iris centers (only available with refine_landmarks=True)
+            left_iris  = landmarks[468]
+            right_iris = landmarks[473]
+
+            # Eye corner landmarks
+            left_eye_outer  = landmarks[33]
+            left_eye_inner  = landmarks[133]
+            right_eye_outer = landmarks[362]
+            right_eye_inner = landmarks[263]
+
+            # Calculate how centered each iris is within its eye (0 = perfect center)
+            left_eye_width  = abs(left_eye_outer.x - left_eye_inner.x)
+            right_eye_width = abs(right_eye_outer.x - right_eye_inner.x)
+
+            left_iris_offset = abs(
+                left_iris.x - (left_eye_outer.x + left_eye_inner.x) / 2
+            ) / (left_eye_width + 1e-6)
+
+            right_iris_offset = abs(
+                right_iris.x - (right_eye_outer.x + right_eye_inner.x) / 2
+            ) / (right_eye_width + 1e-6)
+
+            avg_offset = (left_iris_offset + right_iris_offset) / 2
+
+            # Offset < 0.15 means iris is close enough to center = looking at camera
+            if avg_offset < 0.15:
+                eye_contact_frames += 1
+
+    cap.release()
+
+    if sampled_frames == 0:
+        return 0.0
+
+    score = (eye_contact_frames / sampled_frames) * 100
+    return round(float(score), 2)
+
+
+# ─────────────────────────────────────────
+# ROUTES — VIDEO UPLOAD & ANALYSIS
+# ─────────────────────────────────────────
 
 @app.route("/api/upload-video", methods=["POST"])
 def upload_video():
-
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
-    video_file = request.files["video"]
+    video_file  = request.files["video"]
     firebase_uid = request.form.get("firebase_uid")
-    tag_name = request.form.get("tag_name") or "General"
+    tag_name    = request.form.get("tag_name") or "General"
     video_title = request.form.get("video_title") or "Untitled"
-    email = request.form.get("email", "unknown@email.com")
+    email       = request.form.get("email", "unknown@email.com")
 
     if not firebase_uid:
         return jsonify({"error": "firebase_uid missing"}), 400
 
-    # Auto-create user if not exists
+    # Auto-create user record if this is their first upload
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
     if not user:
         user = User(
-        firebase_uid=firebase_uid,
-        email=email,
-        name=request.form.get("name", "User")
+            firebase_uid=firebase_uid,
+            email=email,
+            name=request.form.get("name", "User")
         )
         db.session.add(user)
         db.session.commit()
 
-    #Find or create tag
+    # Find existing tag or create a new one
     tag = Tag.query.filter_by(user_id=user.id, tag_name=tag_name).first()
     if not tag:
         tag = Tag(tag_name=tag_name, user_id=user.id)
         db.session.add(tag)
         db.session.commit()
 
-    # Upload to Cloudinary (FIXED HERE)
+    # Upload video to Cloudinary
     try:
         result = cloudinary.uploader.upload_large(
-            video_file.stream,   # ✅ USE STREAM
+            video_file.stream,
             resource_type="video"
         )
         cloudinary_url = result["secure_url"]
-        public_id = result["public_id"]
-
+        public_id      = result["public_id"]
     except Exception as e:
         print("CLOUDINARY ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
-    # Save video
+    # Save video record to DB before processing
     new_video = Video(
         video_title=video_title,
         cloudinary_url=cloudinary_url,
@@ -489,38 +659,50 @@ def upload_video():
 
     print("Processing video from Cloudinary...")
 
-    text, duration, silent, posture_score, gesture_score = process_video_from_cloudinary(cloudinary_url)
+    # Run full pipeline — returns transcript + all CV scores
+    text, duration, silent, posture_score, gesture_score, eye_contact_score = (
+        process_video_from_cloudinary(cloudinary_url)
+    )
+
     print("----------- EXTRACTED TEXT -----------")
     print(text)
     print("--------------------------------------")
-    # Evaluate speech
-    print("Evaluating text...")
-    
-    if silent:
-        speech_rate = 0
+
+    # Guard against silent or near-silent videos producing garbage transcripts
+    # Whisper can hallucinate random words on silent/noisy audio
+    if silent or len(text.split()) < 10:
+        speech_rate  = 0
         filler_words = 0
     else:
         speech_rate, filler_words = evaluate_text(text, duration)
-    
-    # Temporary body scores (still random)
-    
-    eye_contact_score = round(random.uniform(60, 95), 2)
-   
+
+    # Convert raw metrics to 0-100 scores
+    speech_rate_score = score_speech_rate(speech_rate)
+    filler_score      = score_filler_words(filler_words, duration)
+
+    # Weighted overall score — weights reflect importance for seated webcam presentations:
+    # Eye contact is most important (30%), posture second (25%),
+    # speech rate third (20%), filler words fourth (15%), gesture least (10%)
     overall_score = round(
-        (posture_score + eye_contact_score + gesture_score) / 3,
+        (
+            eye_contact_score * 0.30 +
+            posture_score     * 0.25 +
+            speech_rate_score * 0.20 +
+            filler_score      * 0.15 +
+            gesture_score     * 0.10
+        ),
         2
     )
 
     analysis = Analysis(
-    video_id=new_video.id,
-    speech_rate=float(round(speech_rate, 2)),
-    filler_words=int(filler_words),
-    posture_score=float(posture_score),
-    eye_contact_score=float(eye_contact_score),
-    gesture_score=float(gesture_score),
-    overall_score=float(overall_score)
+        video_id=new_video.id,
+        speech_rate=float(round(speech_rate, 2)),
+        filler_words=int(filler_words),
+        posture_score=float(posture_score),
+        eye_contact_score=float(eye_contact_score),
+        gesture_score=float(gesture_score),
+        overall_score=float(overall_score)
     )
-
     db.session.add(analysis)
     db.session.commit()
 
@@ -531,157 +713,120 @@ def upload_video():
         "tag_name": tag.tag_name,
         "overall_score": overall_score
     })
-@app.route("/api/update-user", methods=["POST"])
-def update_user():
 
-    data = request.json
+
+# ─────────────────────────────────────────
+# ROUTES — USER MANAGEMENT
+# ─────────────────────────────────────────
+
+@app.route("/api/create-or-get-user", methods=["POST"])
+def create_or_get_user():
+    data         = request.json
     firebase_uid = data.get("firebase_uid")
-    new_name = data.get("name")
+    email        = data.get("email")
+    name         = data.get("name", "User")
+
+    if not firebase_uid or not email:
+        return jsonify({"error": "firebase_uid and email are required"}), 400
 
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
+    if not user:
+        user = User(firebase_uid=firebase_uid, email=email, name=name)
+        db.session.add(user)
+        db.session.commit()
 
+    return jsonify({"message": "OK", "user_id": user.id})
+
+
+@app.route("/api/update-user", methods=["POST"])
+def update_user():
+    data         = request.json
+    firebase_uid = data.get("firebase_uid")
+    new_name     = data.get("name")
+
+    user = User.query.filter_by(firebase_uid=firebase_uid).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     user.name = new_name
     db.session.commit()
-
     return jsonify({"message": "Name updated successfully"})
+
+
 @app.route("/api/delete-user/<firebase_uid>", methods=["DELETE"])
 def delete_user(firebase_uid):
-
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
-
     if not user:
         return jsonify({"message": "User not found"}), 404
 
-    # delete analysis
+    # Delete in order: analysis → videos → tags → user
     videos = Video.query.filter_by(user_id=user.id).all()
-
     for video in videos:
         if video.cloudinary_public_id:
             try:
                 cloudinary.uploader.destroy(
-                    video.cloudinary_public_id,
-                    resource_type="video"
+                    video.cloudinary_public_id, resource_type="video"
                 )
             except Exception as e:
                 print("Cloudinary delete error:", e)
         Analysis.query.filter_by(video_id=video.id).delete()
 
-    # delete videos
     Video.query.filter_by(user_id=user.id).delete()
-
-    # delete tags
     Tag.query.filter_by(user_id=user.id).delete()
-
-    # delete user
     db.session.delete(user)
-
     db.session.commit()
 
     return jsonify({"message": "User deleted successfully"})
-#page routes
-@app.route("/")
-def home():
-    return render_template("index.html")
-@app.route("/index")
-def index():
-    return render_template("index.html")
-@app.route("/login") 
-def login_page(): 
-    return render_template("login.html") 
-@app.route("/signup") 
-def signup_page(): 
-    return render_template("signup.html") 
-@app.route("/new-user") 
-def new_user(): 
-    return render_template("new-user.html")
-@app.route("/upload")
-def upload_page():
-    return render_template("upload.html")
-@app.route("/existing-user")
-def existing_user():
-    return render_template("existing-user.html")   
-@app.route("/editprofile-modal")
-def editprofile_modal():
-    return render_template("editprofile.html")
-@app.route("/analysis")
-def analysis():
-    video_id = request.args.get("video_id")
 
-    if not video_id:
-        return "Video ID missing"
 
-    video = Video.query.get(video_id)
+# ─────────────────────────────────────────
+# ROUTES — TAGS
+# ─────────────────────────────────────────
 
-    if not video or not video.analysis:
-        return "Analysis not found"
-
-    return render_template(
-        "analysis.html",
-        video=video,
-        analysis=video.analysis,
-        tag_name=video.tag.tag_name   # 🔥 ADD THIS
-    )
-@app.route("/analytics")
-def analytics():
-    return render_template("analytics.html")
 @app.route("/api/get-tags/<firebase_uid>", methods=["GET"])
 def get_tags(firebase_uid):
-
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
-
     if not user:
         return jsonify({"tags": []})
 
     tags = Tag.query.filter_by(user_id=user.id).all()
+    return jsonify({"tags": [{"id": t.id, "tag_name": t.tag_name} for t in tags]})
 
-    tag_list = [{"id": tag.id, "tag_name": tag.tag_name} for tag in tags]
 
-    return jsonify({"tags": tag_list})
-@app.route("/api/user-stats/<firebase_uid>", methods=["GET"])
-def user_stats(firebase_uid):
+@app.route("/api/delete-tag/<int:tag_id>", methods=["DELETE"])
+def delete_tag(tag_id):
+    tag = Tag.query.get(tag_id)
+    if not tag:
+        return jsonify({"success": False, "message": "Tag not found"}), 404
 
-    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+    try:
+        videos = Video.query.filter_by(tag_id=tag.id).all()
+        for video in videos:
+            if video.cloudinary_public_id:
+                try:
+                    cloudinary.uploader.destroy(
+                        video.cloudinary_public_id, resource_type="video"
+                    )
+                except Exception as e:
+                    print("Cloudinary delete error:", e)
+            Analysis.query.filter_by(video_id=video.id).delete()
 
-    if not user:
-        return jsonify({
-            "tag_count": 0,
-            "video_count": 0,
-            "avg_score": 0
-        })
+        Video.query.filter_by(tag_id=tag.id).delete()
+        db.session.delete(tag)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        print("Delete tag error:", e)
+        return jsonify({"success": False})
 
-    tag_count = Tag.query.filter_by(user_id=user.id).count()
-    video_count = Video.query.filter_by(user_id=user.id).count()
 
-    # 🔹 Get all analysis for this user's videos
-    analyses = (
-        db.session.query(Analysis)
-        .join(Video, Analysis.video_id == Video.id)
-        .filter(Video.user_id == user.id)
-        .all()
-    )
-
-    if analyses:
-        avg_score = round(
-            sum(a.overall_score for a in analyses) / len(analyses),
-            2
-        )
-    else:
-        avg_score = 0
-
-    return jsonify({
-        "tag_count": tag_count,
-        "video_count": video_count,
-        "avg_score": avg_score
-    })
+# ─────────────────────────────────────────
+# ROUTES — VIDEOS
+# ─────────────────────────────────────────
 
 @app.route("/api/get-videos/<firebase_uid>", methods=["GET"])
 def get_videos(firebase_uid):
-
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
-
     if not user:
         return jsonify({"videos": []})
 
@@ -692,29 +837,77 @@ def get_videos(firebase_uid):
         .all()
     )
 
-    video_list = []
+    return jsonify({"videos": [
+        {
+            "id": v.id,
+            "video_title": v.video_title,
+            "upload_date": v.upload_date.strftime("%d %b %Y"),
+            "overall_score": v.analysis.overall_score if v.analysis else 0
+        }
+        for v in videos
+    ]})
 
-    for video in videos:
-        video_list.append({
-            "id": video.id,
-            "video_title": video.video_title,
-            "upload_date": video.upload_date.strftime("%d %b %Y"),
-            "overall_score": video.analysis.overall_score if video.analysis else 0
-        })
 
-    return jsonify({"videos": video_list})
+@app.route("/api/delete-video/<int:video_id>", methods=["DELETE"])
+def delete_video(video_id):
+    video = Video.query.get(video_id)
+    if not video:
+        return jsonify({"success": False, "message": "Video not found"}), 404
+
+    try:
+        if video.cloudinary_public_id:
+            cloudinary.uploader.destroy(
+                video.cloudinary_public_id, resource_type="video"
+            )
+        Analysis.query.filter_by(video_id=video.id).delete()
+        db.session.delete(video)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        print("Delete video error:", e)
+        return jsonify({"success": False})
+
+
+# ─────────────────────────────────────────
+# ROUTES — ANALYTICS
+# ─────────────────────────────────────────
+
+@app.route("/api/user-stats/<firebase_uid>", methods=["GET"])
+def user_stats(firebase_uid):
+    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+    if not user:
+        return jsonify({"tag_count": 0, "video_count": 0, "avg_score": 0})
+
+    tag_count   = Tag.query.filter_by(user_id=user.id).count()
+    video_count = Video.query.filter_by(user_id=user.id).count()
+
+    analyses = (
+        db.session.query(Analysis)
+        .join(Video, Analysis.video_id == Video.id)
+        .filter(Video.user_id == user.id)
+        .all()
+    )
+
+    avg_score = round(
+        sum(a.overall_score for a in analyses) / len(analyses), 2
+    ) if analyses else 0
+
+    return jsonify({
+        "tag_count": tag_count,
+        "video_count": video_count,
+        "avg_score": avg_score
+    })
+
 
 @app.route("/api/tag-analytics", methods=["GET"])
 def tag_analytics():
-
     firebase_uid = request.args.get("firebase_uid")
-    tag_name = request.args.get("tag")
+    tag_name     = request.args.get("tag")
 
     if not firebase_uid or not tag_name:
         return jsonify({"videos": []})
 
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
-
     if not user:
         return jsonify({"videos": []})
 
@@ -722,7 +915,6 @@ def tag_analytics():
         Tag.user_id == user.id,
         Tag.tag_name.ilike(tag_name)
     ).first()
-
     if not tag:
         return jsonify({"videos": []})
 
@@ -733,96 +925,80 @@ def tag_analytics():
         .all()
     )
 
-    video_data = []
+    return jsonify({"videos": [
+        {
+            "id": v.id,
+            "tag_id": v.tag_id,
+            "title": v.video_title,
+            "upload_date": v.upload_date.strftime("%d %b %Y"),
+            "overall_score": v.analysis.overall_score,
+            "filler_words": v.analysis.filler_words,
+            "posture_score": v.analysis.posture_score,
+            "eye_contact_score": v.analysis.eye_contact_score,
+            "gesture_score": v.analysis.gesture_score
+        }
+        for v in videos if v.analysis
+    ]})
 
-    for video in videos:
-        if video.analysis:
-            video_data.append({
-    "id": video.id,
-    "tag_id": video.tag_id,
-    "title": video.video_title,
-    "upload_date": video.upload_date.strftime("%d %b %Y"),
-    "overall_score": video.analysis.overall_score,
-    "filler_words": video.analysis.filler_words,
-    "posture_score": video.analysis.posture_score,
-    "eye_contact_score": video.analysis.eye_contact_score,
-    "gesture_score": video.analysis.gesture_score
-})
 
-    return jsonify({"videos": video_data})
+# ─────────────────────────────────────────
+# ROUTES — PAGE RENDERING
+# ─────────────────────────────────────────
 
-@app.route("/api/delete-video/<int:video_id>", methods=["DELETE"])
-def delete_video(video_id):
+@app.route("/")
+@app.route("/index")
+def home():
+    return render_template("index.html")
+
+@app.route("/login")
+def login_page():
+    return render_template("login.html")
+
+@app.route("/signup")
+def signup_page():
+    return render_template("signup.html")
+
+@app.route("/new-user")
+def new_user():
+    return render_template("new-user.html")
+
+@app.route("/upload")
+def upload_page():
+    return render_template("upload.html")
+
+@app.route("/existing-user")
+def existing_user():
+    return render_template("existing-user.html")
+
+@app.route("/editprofile-modal")
+def editprofile_modal():
+    return render_template("editprofile.html")
+
+@app.route("/analysis")
+def analysis():
+    video_id = request.args.get("video_id")
+    if not video_id:
+        return "Video ID missing"
 
     video = Video.query.get(video_id)
+    if not video or not video.analysis:
+        return "Analysis not found"
 
-    if not video:
-        return jsonify({"success": False, "message": "Video not found"}), 404
+    return render_template(
+        "analysis.html",
+        video=video,
+        analysis=video.analysis,
+        tag_name=video.tag.tag_name
+    )
 
-    try:
+@app.route("/analytics")
+def analytics():
+    return render_template("analytics.html")
 
-        # Delete from Cloudinary
-        if video.cloudinary_public_id:
-            cloudinary.uploader.destroy(
-                video.cloudinary_public_id,
-                resource_type="video"
-            )
 
-        # Delete analysis first
-        Analysis.query.filter_by(video_id=video.id).delete()
-
-        # Delete video
-        db.session.delete(video)
-
-        db.session.commit()
-
-        return jsonify({"success": True})
-
-    except Exception as e:
-        print("Delete video error:", e)
-        return jsonify({"success": False})
-    
-
-@app.route("/api/delete-tag/<int:tag_id>", methods=["DELETE"])
-def delete_tag(tag_id):
-
-    tag = Tag.query.get(tag_id)
-
-    if not tag:
-        return jsonify({"success": False, "message": "Tag not found"}), 404
-
-    try:
-
-        videos = Video.query.filter_by(tag_id=tag.id).all()
-
-        for video in videos:
-
-            # Delete Cloudinary video
-            if video.cloudinary_public_id:
-                try:
-                    cloudinary.uploader.destroy(
-                        video.cloudinary_public_id,
-                        resource_type="video"
-                    )
-                except Exception as e:
-                    print("Cloudinary delete error:", e)
-
-            # Delete analysis
-            Analysis.query.filter_by(video_id=video.id).delete()
-
-        # Delete videos
-        Video.query.filter_by(tag_id=tag.id).delete()
-
-        # Delete tag
-        db.session.delete(tag)
-
-        db.session.commit()
-
-        return jsonify({"success": True})
-
-    except Exception as e:
-        print("Delete tag error:", e)
-        return jsonify({"success": False})
+# ─────────────────────────────────────────
+# ENTRY POINT
+# ─────────────────────────────────────────
 
 if __name__ == "__main__":
     with app.app_context():
