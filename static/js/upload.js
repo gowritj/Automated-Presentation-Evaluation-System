@@ -16,15 +16,19 @@ const removeFileBtn = document.getElementById("removeFile");
 const infoBtn = document.getElementById("infoBtn");
 const infoPanel = document.getElementById("infoPanel");
 
-// UI elements (cleaned: defined once)
 const profilePanel = document.getElementById("profilePanel");
 const profileBtn = document.querySelector(".profile-icon");
 
-//  Only one tag selection logic
 const tagDropdown = document.getElementById("tagDropdown");
 const newTagInput = document.getElementById("newTagInput");
 
-// If user types new tag → clear dropdown
+// Gets the current user's Firebase ID token for API authentication
+async function getAuthToken() {
+    const user = auth.currentUser;
+    if (!user) return null;
+    return await user.getIdToken();
+}
+
 if (newTagInput) {
   newTagInput.addEventListener("input", () => {
     if (newTagInput.value.trim() !== "") {
@@ -33,7 +37,6 @@ if (newTagInput) {
   });
 }
 
-// If user selects dropdown → clear new tag input
 if (tagDropdown) {
   tagDropdown.addEventListener("change", () => {
     if (tagDropdown.value !== "") {
@@ -48,22 +51,25 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  // Update profile display
   const emailEl = document.getElementById("userEmail");
   const nameEl = document.getElementById("userName");
 
   if (emailEl) emailEl.textContent = user.email;
   if (nameEl) nameEl.textContent = user.displayName || "User";
 
+  // Get token for authenticated requests
+  const token = await getAuthToken();
+
   // Fetch tags for dropdown
   try {
-    const response = await fetch(`/api/get-tags/${user.uid}`);
+    const response = await fetch(`/api/get-tags/${user.uid}`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
     const data = await response.json();
 
     const dropdown = document.getElementById("tagDropdown");
     if (dropdown) {
       dropdown.innerHTML = `<option value="">Select existing tag</option>`;
-
       data.tags.forEach(tag => {
         const option = document.createElement("option");
         option.value = tag.tag_name;
@@ -71,14 +77,15 @@ onAuthStateChanged(auth, async (user) => {
         dropdown.appendChild(option);
       });
     }
-
   } catch (error) {
     console.error("Error loading tags:", error);
   }
 
-  //  Fetch profile stats
+  // Fetch profile stats
   try {
-    const statsRes = await fetch(`/api/user-stats/${user.uid}`);
+    const statsRes = await fetch(`/api/user-stats/${user.uid}`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
     const stats = await statsRes.json();
 
     const profileTag = document.getElementById("profileTagCount");
@@ -86,7 +93,6 @@ onAuthStateChanged(auth, async (user) => {
 
     if (profileTag) profileTag.textContent = stats.tag_count;
     if (profileVideo) profileVideo.textContent = stats.video_count;
-
   } catch (error) {
     console.error("Error loading profile stats:", error);
   }
@@ -99,7 +105,6 @@ if (videoInput) {
     if (!file) return;
 
     const videoURL = URL.createObjectURL(file);
-
     videoPreview.src = videoURL;
     fileNameText.textContent = file.name;
 
@@ -108,13 +113,8 @@ if (videoInput) {
 
     setTimeout(() => {
       const formBottom = form.getBoundingClientRect().bottom + window.scrollY;
-
-      window.scrollTo({
-        top: formBottom - window.innerHeight + 120,
-        behavior: "smooth"
-      });
+      window.scrollTo({ top: formBottom - window.innerHeight + 120, behavior: "smooth" });
     }, 300);
-
   });
 }
 
@@ -124,14 +124,12 @@ if (removeFileBtn) {
     videoInput.value = "";
     videoPreview.src = "";
     fileNameText.textContent = "";
-
     previewContainer.style.display = "none";
     fileUI.style.display = "block";
   });
 }
 
-// INFO BUTTON TOGGLE
-
+/* INFO BUTTON TOGGLE */
 if (infoBtn) {
   infoBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -140,17 +138,12 @@ if (infoBtn) {
 }
 
 document.addEventListener("click", (e) => {
-  if (
-    infoPanel &&
-    !infoPanel.contains(e.target) &&
-    e.target !== infoBtn
-  ) {
+  if (infoPanel && !infoPanel.contains(e.target) && e.target !== infoBtn) {
     infoPanel.classList.remove("open");
   }
 });
 
-// PROFILE TOGGLE
-
+/* PROFILE TOGGLE */
 window.toggleProfile = function () {
   if (!profilePanel) return;
   profilePanel.classList.toggle("open");
@@ -158,16 +151,13 @@ window.toggleProfile = function () {
 
 document.addEventListener("click", (e) => {
   if (!profilePanel) return;
-
   const clickedInsideProfile = profilePanel.contains(e.target);
-
   if (!clickedInsideProfile && !profileBtn.contains(e.target)) {
     profilePanel.classList.remove("open");
   }
 });
 
-// FORM SUBMIT TO BACKEND
-
+/* FORM SUBMIT */
 if (form) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -184,9 +174,7 @@ if (form) {
       return;
     }
 
-    const videoTitle =
-      document.getElementById("videoTitleInput")?.value || "Untitled";
-
+    const videoTitle = document.getElementById("videoTitleInput")?.value || "Untitled";
     const dropdownTag = document.getElementById("tagDropdown")?.value;
     const newTag = document.getElementById("newTagInput")?.value.trim();
 
@@ -195,13 +183,7 @@ if (form) {
       return;
     }
 
-    let selectedTag;
-
-    if (newTag) {
-      selectedTag = newTag;
-    } else {
-      selectedTag = dropdownTag;
-    }
+    const selectedTag = newTag || dropdownTag;
 
     const formData = new FormData();
     formData.append("video", file);
@@ -212,19 +194,19 @@ if (form) {
     const uploadBtn = form.querySelector(".upload-btn");
 
     try {
-
       uploadBtn.disabled = true;
 
       const overlay = document.getElementById("uploadOverlay");
       overlay.style.display = "flex";
 
-      const response = await fetch(
-        "/api/upload-video",
-        {
-          method: "POST",
-          body: formData
-        }
-      );
+      // Get fresh token for upload
+      const token = await getAuthToken();
+
+      const response = await fetch("/api/upload-video", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+        body: formData
+      });
 
       const data = await response.json();
 
@@ -240,7 +222,6 @@ if (form) {
     } catch (error) {
       console.error("Upload error:", error);
       alert("Upload failed.");
-
       uploadBtn.textContent = "Upload & Analyze →";
       uploadBtn.disabled = false;
     }

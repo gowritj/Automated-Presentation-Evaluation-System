@@ -1,3 +1,5 @@
+import firebase_admin
+from firebase_admin import credentials, auth as firebase_auth
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -49,6 +51,10 @@ model = whisper.load_model("tiny")
 
 # Groq client for content analysis — free LLM API
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+# Firebase Admin SDK — for server-side token verification
+cred = credentials.Certificate(os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH"))
+firebase_admin.initialize_app(cred)
 
 
 # ─────────────────────────────────────────
@@ -796,12 +802,38 @@ def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score,
 
     return feedback
 
+def verify_firebase_token(request):
+    """
+    Verifies the Firebase ID token sent in the Authorization header.
+    Returns the decoded token (with uid, email etc.) if valid.
+    Returns None if token is missing or invalid.
+    
+    Client must send: Authorization: Bearer <firebase_id_token>
+    """
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    
+    id_token = auth_header.split("Bearer ")[1]
+    
+    try:
+        decoded_token = firebase_auth.verify_id_token(id_token)
+        return decoded_token
+    except Exception as e:
+        print("Firebase token verification failed:", e)
+        return None
+
+
 # ─────────────────────────────────────────
 # ROUTES — VIDEO UPLOAD & ANALYSIS
 # ─────────────────────────────────────────
 
 @app.route("/api/upload-video", methods=["POST"])
 def upload_video():
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
@@ -895,17 +927,17 @@ def upload_video():
     # Eye contact is most important (30%), posture second (25%),
     # speech rate third (20%), filler words fourth (15%), gesture least (10%)
     overall_score = round(
-    (
-        eye_contact_score       * 0.20 +
-        posture_score           * 0.15 +
-        topic_relevance_score   * 0.15 +
-        speech_rate_score       * 0.10 +
-        filler_score            * 0.10 +
-        vocabulary_score        * 0.10 +
-        confidence_score        * 0.10 +
-        content_structure_score * 0.05 +
-        gesture_score           * 0.05
-    ),
+        (
+            eye_contact_score       * 0.20 +
+            posture_score           * 0.15 +
+            topic_relevance_score   * 0.15 +
+            speech_rate_score       * 0.10 +
+            filler_score            * 0.10 +
+            vocabulary_score        * 0.10 +
+            confidence_score        * 0.10 +
+            content_structure_score * 0.05 +
+            gesture_score           * 0.05
+        ),
     2
 )
 
@@ -1007,6 +1039,11 @@ def delete_user(firebase_uid):
 
 @app.route("/api/get-tags/<firebase_uid>", methods=["GET"])
 def get_tags(firebase_uid):
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
+    if decoded_token["uid"] != firebase_uid:
+        return jsonify({"error": "Forbidden"}), 403
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
     if not user:
         return jsonify({"tags": []})
@@ -1017,6 +1054,9 @@ def get_tags(firebase_uid):
 
 @app.route("/api/delete-tag/<int:tag_id>", methods=["DELETE"])
 def delete_tag(tag_id):
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
     tag = Tag.query.get(tag_id)
     if not tag:
         return jsonify({"success": False, "message": "Tag not found"}), 404
@@ -1048,6 +1088,11 @@ def delete_tag(tag_id):
 
 @app.route("/api/get-videos/<firebase_uid>", methods=["GET"])
 def get_videos(firebase_uid):
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
+    if decoded_token["uid"] != firebase_uid:
+        return jsonify({"error": "Forbidden"}), 403
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
     if not user:
         return jsonify({"videos": []})
@@ -1072,6 +1117,9 @@ def get_videos(firebase_uid):
 
 @app.route("/api/delete-video/<int:video_id>", methods=["DELETE"])
 def delete_video(video_id):
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
     video = Video.query.get(video_id)
     if not video:
         return jsonify({"success": False, "message": "Video not found"}), 404
@@ -1096,6 +1144,11 @@ def delete_video(video_id):
 
 @app.route("/api/user-stats/<firebase_uid>", methods=["GET"])
 def user_stats(firebase_uid):
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
+    if decoded_token["uid"] != firebase_uid:
+        return jsonify({"error": "Forbidden"}), 403
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
     if not user:
         return jsonify({"tag_count": 0, "video_count": 0, "avg_score": 0})
@@ -1123,7 +1176,13 @@ def user_stats(firebase_uid):
 
 @app.route("/api/tag-analytics", methods=["GET"])
 def tag_analytics():
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
     firebase_uid = request.args.get("firebase_uid")
+    if decoded_token["uid"] != firebase_uid:
+        return jsonify({"error": "Forbidden"}), 403
+   
     tag_name     = request.args.get("tag")
 
     if not firebase_uid or not tag_name:

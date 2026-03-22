@@ -16,3 +16,5 @@ uploads/videos/
 *.mp4
 *.wav
 uploads/
+
+serviceAccountKey.json
