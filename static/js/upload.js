@@ -6,6 +6,26 @@ import {
   signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+// ===============================
+// ERROR HANDLING (GLOBAL)
+// ===============================
+const errorBox = document.getElementById("uploadError");
+
+function showError(message) {
+  if (!errorBox) return;
+  errorBox.textContent = message;
+  errorBox.style.display = "block";
+}
+
+function clearError() {
+  if (!errorBox) return;
+  errorBox.textContent = "";
+  errorBox.style.display = "none";
+}
+
+// ===============================
+// ELEMENTS
+// ===============================
 const form = document.getElementById("uploadForm");
 const videoInput = document.getElementById("videoInput");
 const previewContainer = document.getElementById("previewContainer");
@@ -22,13 +42,18 @@ const profileBtn = document.querySelector(".profile-icon");
 const tagDropdown = document.getElementById("tagDropdown");
 const newTagInput = document.getElementById("newTagInput");
 
-// Gets the current user's Firebase ID token for API authentication
+// ===============================
+// AUTH TOKEN
+// ===============================
 async function getAuthToken() {
-    const user = auth.currentUser;
-    if (!user) return null;
-    return await user.getIdToken();
+  const user = auth.currentUser;
+  if (!user) return null;
+  return await user.getIdToken();
 }
 
+// ===============================
+// TAG INPUT LOGIC
+// ===============================
 if (newTagInput) {
   newTagInput.addEventListener("input", () => {
     if (newTagInput.value.trim() !== "") {
@@ -45,80 +70,101 @@ if (tagDropdown) {
   });
 }
 
+// ===============================
+// AUTH STATE
+// ===============================
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     window.location.href = "/login";
     return;
   }
 
-  const emailEl = document.getElementById("userEmail");
-  const nameEl = document.getElementById("userName");
+  document.getElementById("userEmail").textContent = user.email;
+  document.getElementById("userName").textContent = user.displayName || "User";
 
-  if (emailEl) emailEl.textContent = user.email;
-  if (nameEl) nameEl.textContent = user.displayName || "User";
-
-  // Get token for authenticated requests
   const token = await getAuthToken();
 
-  // Fetch tags for dropdown
+  // Load tags
   try {
-    const response = await fetch(`/api/get-tags/${user.uid}`, {
-      headers: { "Authorization": `Bearer ${token}` }
+    const res = await fetch(`/api/get-tags/${user.uid}`, {
+      headers: { Authorization: `Bearer ${token}` }
     });
-    const data = await response.json();
+    const data = await res.json();
 
-    const dropdown = document.getElementById("tagDropdown");
-    if (dropdown) {
-      dropdown.innerHTML = `<option value="">Select existing tag</option>`;
-      data.tags.forEach(tag => {
-        const option = document.createElement("option");
-        option.value = tag.tag_name;
-        option.textContent = tag.tag_name;
-        dropdown.appendChild(option);
-      });
-    }
-  } catch (error) {
-    console.error("Error loading tags:", error);
+    tagDropdown.innerHTML = `<option value="">Select existing tag</option>`;
+    data.tags.forEach(tag => {
+      const option = document.createElement("option");
+      option.value = tag.tag_name;
+      option.textContent = tag.tag_name;
+      tagDropdown.appendChild(option);
+    });
+  } catch (err) {
+    console.error(err);
   }
 
-  // Fetch profile stats
+  // Load stats
   try {
-    const statsRes = await fetch(`/api/user-stats/${user.uid}`, {
-      headers: { "Authorization": `Bearer ${token}` }
+    const res = await fetch(`/api/user-stats/${user.uid}`, {
+      headers: { Authorization: `Bearer ${token}` }
     });
-    const stats = await statsRes.json();
+    const stats = await res.json();
 
-    const profileTag = document.getElementById("profileTagCount");
-    const profileVideo = document.getElementById("profileVideoCount");
-
-    if (profileTag) profileTag.textContent = stats.tag_count;
-    if (profileVideo) profileVideo.textContent = stats.video_count;
-  } catch (error) {
-    console.error("Error loading profile stats:", error);
+    document.getElementById("profileTagCount").textContent = stats.tag_count;
+    document.getElementById("profileVideoCount").textContent = stats.video_count;
+  } catch (err) {
+    console.error(err);
   }
 });
 
-/* VIDEO PREVIEW */
+// ===============================
+// VIDEO PREVIEW + VALIDATION
+// ===============================
+// ===============================
+// VIDEO PREVIEW + VALIDATION
+// ===============================
 if (videoInput) {
   videoInput.addEventListener("change", () => {
     const file = videoInput.files[0];
     if (!file) return;
 
+    clearError();
+
+    const allowedExtensions = ["mp4", "mov", "avi", "webm"];
+    const maxSizeMB = 500;
+
+    const fileExt = file.name.split(".").pop().toLowerCase();
+    const fileSizeMB = file.size / (1024 * 1024);
+
+    // ❌ Invalid extension
+    if (!allowedExtensions.includes(fileExt)) {
+      showError("Invalid file type. Only MP4, MOV, AVI, WEBM allowed.");
+      videoInput.value = "";
+      previewContainer.style.display = "none";
+      fileUI.style.display = "block";
+      return;
+    }
+
+    // ❌ File too large (THIS WAS MISSING)
+    if (fileSizeMB > maxSizeMB) {
+      showError(`File too large. Max size is ${maxSizeMB}MB.`);
+      videoInput.value = "";
+      previewContainer.style.display = "none";
+      fileUI.style.display = "block";
+      return;
+    }
+
+    // ✅ Valid file → show preview
     const videoURL = URL.createObjectURL(file);
     videoPreview.src = videoURL;
     fileNameText.textContent = file.name;
 
     previewContainer.style.display = "block";
     fileUI.style.display = "none";
-
-    setTimeout(() => {
-      const formBottom = form.getBoundingClientRect().bottom + window.scrollY;
-      window.scrollTo({ top: formBottom - window.innerHeight + 120, behavior: "smooth" });
-    }, 300);
   });
 }
-
-/* REMOVE CURRENT VIDEO */
+// ===============================
+// REMOVE VIDEO
+// ===============================
 if (removeFileBtn) {
   removeFileBtn.addEventListener("click", () => {
     videoInput.value = "";
@@ -126,10 +172,13 @@ if (removeFileBtn) {
     fileNameText.textContent = "";
     previewContainer.style.display = "none";
     fileUI.style.display = "block";
+    clearError();
   });
 }
 
-/* INFO BUTTON TOGGLE */
+// ===============================
+// INFO PANEL
+// ===============================
 if (infoBtn) {
   infoBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -138,48 +187,73 @@ if (infoBtn) {
 }
 
 document.addEventListener("click", (e) => {
-  if (infoPanel && !infoPanel.contains(e.target) && e.target !== infoBtn) {
+  if (!infoPanel.contains(e.target) && e.target !== infoBtn) {
     infoPanel.classList.remove("open");
   }
 });
 
-/* PROFILE TOGGLE */
+// ===============================
+// PROFILE PANEL
+// ===============================
 window.toggleProfile = function () {
-  if (!profilePanel) return;
   profilePanel.classList.toggle("open");
 };
 
 document.addEventListener("click", (e) => {
-  if (!profilePanel) return;
-  const clickedInsideProfile = profilePanel.contains(e.target);
-  if (!clickedInsideProfile && !profileBtn.contains(e.target)) {
+  if (!profilePanel.contains(e.target) && !profileBtn.contains(e.target)) {
     profilePanel.classList.remove("open");
   }
 });
 
-/* FORM SUBMIT */
+// ===============================
+// FORM SUBMIT
+// ===============================
 if (form) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
+    clearError();
+
     const file = videoInput.files[0];
+
     if (!file) {
-      alert("Please select a video first.");
+      showError("Please select a video first.");
+      return;
+    }
+
+    const allowedExtensions = ["mp4", "mov", "avi", "webm"];
+    const maxSizeMB = 500;
+
+    const fileExt = file.name.split(".").pop().toLowerCase();
+
+    if (!allowedExtensions.includes(fileExt)) {
+      showError("Invalid file type.");
+      return;
+    }
+
+    if (!file.type.startsWith("video/")) {
+      showError("Invalid video file.");
+      return;
+    }
+
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > maxSizeMB) {
+      showError(`File too large. Max size is ${maxSizeMB}MB.`);
       return;
     }
 
     const user = auth.currentUser;
     if (!user) {
-      alert("User not authenticated.");
+      showError("User not authenticated.");
       return;
     }
 
-    const videoTitle = document.getElementById("videoTitleInput")?.value || "Untitled";
-    const dropdownTag = document.getElementById("tagDropdown")?.value;
-    const newTag = document.getElementById("newTagInput")?.value.trim();
+    const videoTitle = document.getElementById("videoTitleInput").value || "Untitled";
+    const dropdownTag = tagDropdown.value;
+    const newTag = newTagInput.value.trim();
 
     if ((!newTag && !dropdownTag) || (newTag && dropdownTag)) {
-      alert("Please choose either an existing tag OR create a new tag (not both).");
+      showError("Choose either existing tag OR new tag.");
       return;
     }
 
@@ -196,33 +270,29 @@ if (form) {
     try {
       uploadBtn.disabled = true;
 
-      const overlay = document.getElementById("uploadOverlay");
-      overlay.style.display = "flex";
+      document.getElementById("uploadOverlay").style.display = "flex";
 
-      // Get fresh token for upload
       const token = await getAuthToken();
 
-      const response = await fetch("/api/upload-video", {
+      const res = await fetch("/api/upload-video", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
-        alert(data.error || "Upload failed");
-        uploadBtn.textContent = "Upload & Analyze →";
+      if (!res.ok) {
+        showError(data.error || "Upload failed");
         uploadBtn.disabled = false;
         return;
       }
 
       window.location.href = `/analysis?video_id=${data.video_id}`;
 
-    } catch (error) {
-      console.error("Upload error:", error);
-      alert("Upload failed.");
-      uploadBtn.textContent = "Upload & Analyze →";
+    } catch (err) {
+      console.error(err);
+      showError("Upload failed.");
       uploadBtn.disabled = false;
     }
   });

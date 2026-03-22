@@ -19,7 +19,15 @@ import numpy as np
 from groq import Groq
 import json
 load_dotenv()
+# ─────────────────────────────────────────
+# FILE VALIDATION
+# ─────────────────────────────────────────
 
+ALLOWED_EXTENSIONS = {"mp4", "mov", "avi", "webm"}
+MAX_FILE_SIZE_MB = 500
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 # ─────────────────────────────────────────
 # CLOUDINARY CONFIG
 # ─────────────────────────────────────────
@@ -830,14 +838,46 @@ def verify_firebase_token(request):
 # ─────────────────────────────────────────
 
 @app.route("/api/upload-video", methods=["POST"])
+
 def upload_video():
     decoded_token = verify_firebase_token(request)
     if not decoded_token:
         return jsonify({"error": "Unauthorized"}), 401
+    # ✅ SIZE CHECK — MUST BE BEFORE reading file
+    MAX_FILE_SIZE_MB = 500
+    MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+    if request.content_length and request.content_length > MAX_FILE_SIZE_BYTES:
+        return jsonify({
+            "error": f"File too large. Max size is {MAX_FILE_SIZE_MB}MB."
+        }), 400
+
+    # ✅ Now check file exists
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
     video_file  = request.files["video"]
+    # Validate file extension
+    if not allowed_file(video_file.filename):
+        return jsonify({
+            "error": "Invalid file type. Only mp4, mov, avi, webm allowed."
+        }), 400
+
+    # Validate MIME type (extra safety)
+    if not video_file.mimetype.startswith("video/"):
+        return jsonify({
+            "error": "Uploaded file is not a valid video."
+        }), 400
+
+    # Validate file size
+    #video_file.seek(0, os.SEEK_END)
+    #file_size_mb = video_file.tell() / (1024 * 1024)
+    #video_file.seek(0)
+
+    if file_size_mb > MAX_FILE_SIZE_MB:
+        return jsonify({
+            "error": f"File too large. Max size is {MAX_FILE_SIZE_MB}MB."
+        }), 400
     firebase_uid = request.form.get("firebase_uid")
     tag_name    = request.form.get("tag_name") or "General"
     video_title = request.form.get("video_title") or "Untitled"
