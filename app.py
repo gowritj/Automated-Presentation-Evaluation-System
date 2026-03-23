@@ -143,9 +143,8 @@ def process_video_from_cloudinary(video_url):
         temp_video.write(chunk)
     temp_video.close()  # Must close before OpenCV/ffmpeg reads it
 
+    video_path = temp_video.name
     try:
-        video_path = temp_video.name
-
         # Run all three CV pipelines on the same video file
         posture_score = calculate_posture(video_path)
         gesture_score = calculate_gesture(video_path)
@@ -342,11 +341,12 @@ Scoring guide:
         }
     except Exception as e:
         print("Groq API error:", e)
+        # Return a clear error payload so the caller knows analysis failed
         return {
             "topic_relevance_score": 0.0,
-            "topic_relevance_reason": "Analysis failed — please try again.",
+            "topic_relevance_reason": f"Analysis unavailable: {str(e)[:80]}",
             "content_structure_score": 0.0,
-            "content_structure_reason": "Analysis failed — please try again."
+            "content_structure_reason": f"Analysis unavailable: {str(e)[:80]}"
         }
 
 # ─────────────────────────────────────────
@@ -874,10 +874,6 @@ def upload_video():
     #file_size_mb = video_file.tell() / (1024 * 1024)
     #video_file.seek(0)
 
-    if file_size_mb > MAX_FILE_SIZE_MB:
-        return jsonify({
-            "error": f"File too large. Max size is {MAX_FILE_SIZE_MB}MB."
-        }), 400
     firebase_uid = request.form.get("firebase_uid")
     tag_name    = request.form.get("tag_name") or "General"
     video_title = request.form.get("video_title") or "Untitled"
@@ -929,76 +925,81 @@ def upload_video():
 
     print("Processing video from Cloudinary...")
 
-    # Run full pipeline — returns transcript + all CV scores
-    text, duration, silent, posture_score, gesture_score, eye_contact_score = (
-        process_video_from_cloudinary(cloudinary_url)
-    )
+    try:
+        # Run full pipeline — returns transcript + all CV scores
+        text, duration, silent, posture_score, gesture_score, eye_contact_score = (
+            process_video_from_cloudinary(cloudinary_url)
+        )
 
-    print("----------- EXTRACTED TEXT -----------")
-    print(text)
-    print("--------------------------------------")
+        # Guard against silent or near-silent videos
+        if silent or len(text.split()) < 10:
+            speech_rate          = 0
+            filler_words         = 0
+            vocabulary_score     = 0.0
+            confidence_score     = 0.0
+            topic_relevance_score    = 0.0
+            content_structure_score  = 0.0
+            topic_relevance_reason   = "No speech detected."
+            content_structure_reason = "No speech detected."
+        else:
+            speech_rate, filler_words = evaluate_text(text, duration)
+            vocabulary_score     = score_vocabulary(text)
+            confidence_score     = score_confidence_language(text, duration)
+            content_result       = analyse_content_with_groq(text, video_title)
+            topic_relevance_score    = content_result["topic_relevance_score"]
+            content_structure_score  = content_result["content_structure_score"]
+            topic_relevance_reason   = content_result["topic_relevance_reason"]
+            content_structure_reason = content_result["content_structure_reason"]
 
-    # Guard against silent or near-silent videos producing garbage transcripts
-    # Whisper can hallucinate random words on silent/noisy audio
-    if silent or len(text.split()) < 10:
-        speech_rate          = 0
-        filler_words         = 0
-        vocabulary_score     = 0.0
-        confidence_score     = 0.0
-        topic_relevance_score    = 0.0
-        content_structure_score  = 0.0
-        topic_relevance_reason   = "No speech detected."
-        content_structure_reason = "No speech detected."
-    else:
-        speech_rate, filler_words = evaluate_text(text, duration)
-        vocabulary_score     = score_vocabulary(text)
-        confidence_score     = score_confidence_language(text, duration)
-        content_result       = analyse_content_with_groq(text, video_title)
-        topic_relevance_score    = content_result["topic_relevance_score"]
-        content_structure_score  = content_result["content_structure_score"]
-        topic_relevance_reason   = content_result["topic_relevance_reason"]
-        content_structure_reason = content_result["content_structure_reason"]
+        # Convert raw metrics to 0-100 scores
+        speech_rate_score = score_speech_rate(speech_rate)
+        filler_score      = score_filler_words(filler_words, duration)
 
-    # Convert raw metrics to 0-100 scores
-    speech_rate_score = score_speech_rate(speech_rate)
-    filler_score      = score_filler_words(filler_words, duration)
+        overall_score = round(
+            (
+                eye_contact_score       * 0.20 +
+                posture_score           * 0.15 +
+                topic_relevance_score   * 0.15 +
+                speech_rate_score       * 0.10 +
+                filler_score            * 0.10 +
+                vocabulary_score        * 0.10 +
+                confidence_score        * 0.10 +
+                content_structure_score * 0.05 +
+                gesture_score           * 0.05
+            ),
+        2
+        )
 
-    # Weighted overall score — weights reflect importance for seated webcam presentations:
-    # Eye contact is most important (30%), posture second (25%),
-    # speech rate third (20%), filler words fourth (15%), gesture least (10%)
-    overall_score = round(
-        (
-            eye_contact_score       * 0.20 +
-            posture_score           * 0.15 +
-            topic_relevance_score   * 0.15 +
-            speech_rate_score       * 0.10 +
-            filler_score            * 0.10 +
-            vocabulary_score        * 0.10 +
-            confidence_score        * 0.10 +
-            content_structure_score * 0.05 +
-            gesture_score           * 0.05
-        ),
-    2
-)
+        analysis = Analysis(
+            video_id=new_video.id,
+            speech_rate=float(round(speech_rate, 2)),
+            filler_words=int(filler_words),
+            posture_score=float(posture_score),
+            eye_contact_score=float(eye_contact_score),
+            gesture_score=float(gesture_score),
+            overall_score=float(overall_score),
+            duration=float(round(duration, 2)),
+            vocabulary_score=float(vocabulary_score),
+            confidence_score=float(confidence_score),
+            topic_relevance_score=float(topic_relevance_score),
+            content_structure_score=float(content_structure_score),
+            topic_relevance_reason=topic_relevance_reason,
+            content_structure_reason=content_structure_reason
+        )
+        db.session.add(analysis)
+        db.session.commit()
 
-    analysis = Analysis(
-        video_id=new_video.id,
-        speech_rate=float(round(speech_rate, 2)),
-        filler_words=int(filler_words),
-        posture_score=float(posture_score),
-        eye_contact_score=float(eye_contact_score),
-        gesture_score=float(gesture_score),
-        overall_score=float(overall_score),
-        duration=float(round(duration, 2)),
-        vocabulary_score=float(vocabulary_score),
-        confidence_score=float(confidence_score),
-        topic_relevance_score=float(topic_relevance_score),
-        content_structure_score=float(content_structure_score),
-        topic_relevance_reason=topic_relevance_reason,
-        content_structure_reason=content_structure_reason
-    )
-    db.session.add(analysis)
-    db.session.commit()
+    except Exception as e:
+        print("PROCESSING ERROR — cleaning up:", e)
+        # Delete DB record
+        db.session.delete(new_video)
+        db.session.commit()
+        # Delete Cloudinary asset
+        try:
+            cloudinary.uploader.destroy(public_id, resource_type="video")
+        except Exception as cloud_err:
+            print("Cloudinary cleanup failed:", cloud_err)
+        return jsonify({"error": "Analysis failed. Please try uploading again."}), 500
 
     return jsonify({
         "message": "Upload and analysis completed",

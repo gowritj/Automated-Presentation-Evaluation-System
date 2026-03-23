@@ -283,7 +283,8 @@ if (form) {
       const data = await res.json();
 
       if (!res.ok) {
-        showError(data.error || "Upload failed");
+        document.getElementById("uploadOverlay").style.display = "none";
+        showError(data.error || "Analysis failed. Please try uploading again.");
         uploadBtn.disabled = false;
         return;
       }
@@ -292,7 +293,8 @@ if (form) {
 
     } catch (err) {
       console.error(err);
-      showError("Upload failed.");
+      document.getElementById("uploadOverlay").style.display = "none";
+      showError("Upload failed. Please try again.");
       uploadBtn.disabled = false;
     }
   });
