@@ -1257,7 +1257,11 @@ def tag_analytics():
             "filler_words": v.analysis.filler_words,
             "posture_score": v.analysis.posture_score,
             "eye_contact_score": v.analysis.eye_contact_score,
-            "gesture_score": v.analysis.gesture_score
+            "gesture_score": v.analysis.gesture_score,
+            "vocabulary_score": v.analysis.vocabulary_score,
+            "confidence_score": v.analysis.confidence_score,
+            "topic_relevance_score": v.analysis.topic_relevance_score,
+            "content_structure_score": v.analysis.content_structure_score
         }
         for v in videos if v.analysis
     ]})

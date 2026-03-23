@@ -153,33 +153,66 @@ async function loadTagAnalytics(firebase_uid, tag, token) {
   const bestScoreEl = document.getElementById("bestScore");
   if (bestScoreEl) bestScoreEl.textContent = bestPerformance + "%";
 
-  const avgFiller  = videos.reduce((a, b) => a + b.filler_words, 0) / videos.length;
-  const avgPosture = videos.reduce((a, b) => a + b.posture_score, 0) / videos.length;
-  const avgEye     = videos.reduce((a, b) => a + b.eye_contact_score, 0) / videos.length;
-  const avgGesture = videos.reduce((a, b) => a + b.gesture_score, 0) / videos.length;
+  const avgFiller       = videos.reduce((a, b) => a + b.filler_words, 0) / videos.length;
+  const avgPosture      = videos.reduce((a, b) => a + b.posture_score, 0) / videos.length;
+  const avgEye          = videos.reduce((a, b) => a + b.eye_contact_score, 0) / videos.length;
+  const avgGesture      = videos.reduce((a, b) => a + b.gesture_score, 0) / videos.length;
+  const avgVocabulary      = videos.reduce((a, b) => a + b.vocabulary_score, 0) / videos.length;
+  const avgConfidenceScore = videos.reduce((a, b) => a + b.confidence_score, 0) / videos.length;
+  const avgTopicRel        = videos.reduce((a, b) => a + b.topic_relevance_score, 0) / videos.length;
+  const avgStructure       = videos.reduce((a, b) => a + b.content_structure_score, 0) / videos.length;
 
   new Chart(document.getElementById("scoreChart"), {
     type: "line",
     data: {
       labels,
-      datasets: [{
-        label: "Confidence Score",
-        data: scores,
-        borderColor: "#cbd5f5",
-        backgroundColor: "rgba(203,213,245,0.2)",
-        tension: 0.4,
-        fill: true
-      }]
+      datasets: [
+        {
+          label: "Overall Score",
+          data: scores,
+          borderColor: "#cbd5f5",
+          backgroundColor: "rgba(203,213,245,0.2)",
+          tension: 0.4,
+          fill: true
+        },
+        {
+          label: "Vocabulary",
+          data: videos.map(v => v.vocabulary_score),
+          borderColor: "#86efac",
+          backgroundColor: "transparent",
+          tension: 0.4
+        },
+        {
+          label: "Confidence",
+          data: videos.map(v => v.confidence_score),
+          borderColor: "#fcd34d",
+          backgroundColor: "transparent",
+          tension: 0.4
+        },
+        {
+          label: "Topic Relevance",
+          data: videos.map(v => v.topic_relevance_score),
+          borderColor: "#f9a8d4",
+          backgroundColor: "transparent",
+          tension: 0.4
+        },
+        {
+          label: "Content Structure",
+          data: videos.map(v => v.content_structure_score),
+          borderColor: "#6ee7b7",
+          backgroundColor: "transparent",
+          tension: 0.4
+        }
+      ]
     }
   });
-
   new Chart(document.getElementById("improvementChart"), {
     type: "bar",
     data: {
-      labels: ["Filler Words", "Posture", "Eye Contact", "Gestures"],
+      labels: ["Filler Words", "Posture", "Eye Contact", "Gestures", "Vocabulary", "Confidence", "Topic Relevance", "Structure"],
       datasets: [{
         label: "Average Performance",
-        data: [avgFiller, avgPosture, avgEye, avgGesture],
+        data: [avgFiller, avgPosture, avgEye, avgGesture, avgVocabulary, avgConfidenceScore, avgTopicRel, avgStructure],
         backgroundColor: "#a5b4fc"
       }]
     }
