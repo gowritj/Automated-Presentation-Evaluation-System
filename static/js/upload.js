@@ -206,6 +206,32 @@ document.addEventListener("click", (e) => {
 });
 
 // ===============================
+// OVERLAY HELPERS
+// ===============================
+function setProgress(percent) {
+  const fill = document.getElementById("progressRingFill");
+  const pct  = document.getElementById("progressPct");
+  if (!fill || !pct) return;
+  const circumference = 314; // 2π × 50
+  fill.style.strokeDashoffset = circumference - (circumference * percent / 100);
+  pct.textContent = `${Math.round(percent)}%`;
+}
+
+function setStage(activeStage) {
+  document.querySelectorAll(".stage-item").forEach(li => {
+    const n = parseInt(li.dataset.stage, 10);
+    li.classList.remove("active", "done");
+    if (n < activeStage)  li.classList.add("done");
+    if (n === activeStage) li.classList.add("active");
+  });
+}
+
+function setMainLabel(text) {
+  const el = document.getElementById("uploadMainLabel");
+  if (el) el.textContent = text;
+}
+
+// ===============================
 // FORM SUBMIT
 // ===============================
 if (form) {
@@ -216,41 +242,20 @@ if (form) {
 
     const file = videoInput.files[0];
 
-    if (!file) {
-      showError("Please select a video first.");
-      return;
-    }
+    if (!file) { showError("Please select a video first."); return; }
 
     const allowedExtensions = ["mp4", "mov", "avi", "webm"];
-    const maxSizeMB = 500;
-
     const fileExt = file.name.split(".").pop().toLowerCase();
-
-    if (!allowedExtensions.includes(fileExt)) {
-      showError("Invalid file type.");
-      return;
-    }
-
-    if (!file.type.startsWith("video/")) {
-      showError("Invalid video file.");
-      return;
-    }
-
-    const fileSizeMB = file.size / (1024 * 1024);
-    if (fileSizeMB > maxSizeMB) {
-      showError(`File too large. Max size is ${maxSizeMB}MB.`);
-      return;
-    }
+    if (!allowedExtensions.includes(fileExt)) { showError("Invalid file type."); return; }
+    if (!file.type.startsWith("video/"))      { showError("Invalid video file."); return; }
+    if (file.size / (1024 * 1024) > 500)      { showError("File too large. Max size is 500 MB."); return; }
 
     const user = auth.currentUser;
-    if (!user) {
-      showError("User not authenticated.");
-      return;
-    }
+    if (!user) { showError("User not authenticated."); return; }
 
-    const videoTitle = document.getElementById("videoTitleInput").value || "Untitled";
+    const videoTitle  = document.getElementById("videoTitleInput").value || "Untitled";
     const dropdownTag = tagDropdown.value;
-    const newTag = newTagInput.value.trim();
+    const newTag      = newTagInput.value.trim();
 
     if ((!newTag && !dropdownTag) || (newTag && dropdownTag)) {
       showError("Choose either existing tag OR new tag.");
@@ -258,44 +263,98 @@ if (form) {
     }
 
     const selectedTag = newTag || dropdownTag;
-
-    const formData = new FormData();
-    formData.append("video", file);
+    const formData    = new FormData();
+    formData.append("video",        file);
     formData.append("firebase_uid", user.uid);
-    formData.append("tag_name", selectedTag);
-    formData.append("video_title", videoTitle);
+    formData.append("tag_name",     selectedTag);
+    formData.append("video_title",  videoTitle);
 
     const uploadBtn = form.querySelector(".upload-btn");
+    uploadBtn.disabled = true;
 
+    // Show overlay
+    const overlay = document.getElementById("uploadOverlay");
+    overlay.style.display = "flex";
+    setProgress(0);
+    setStage(0);
+    setMainLabel("Preparing upload…");
+
+    const token = await getAuthToken();
+
+    // --- POST the file; read back SSE stream ---
+    let fetchRes;
     try {
-      uploadBtn.disabled = true;
-
-      document.getElementById("uploadOverlay").style.display = "flex";
-
-      const token = await getAuthToken();
-
-      const res = await fetch("/api/upload-video", {
+      fetchRes = await fetch("/api/upload-video-sse", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
-        body: formData
+        body: formData,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        document.getElementById("uploadOverlay").style.display = "none";
-        showError(data.error || "Analysis failed. Please try uploading again.");
-        uploadBtn.disabled = false;
-        return;
-      }
-
-      window.location.href = `/analysis?video_id=${data.video_id}`;
-
-    } catch (err) {
-      console.error(err);
-      document.getElementById("uploadOverlay").style.display = "none";
-      showError("Upload failed. Please try again.");
+    } catch (netErr) {
+      overlay.style.display = "none";
+      showError("Network error. Please try again.");
       uploadBtn.disabled = false;
+      return;
     }
+
+    if (!fetchRes.ok) {
+      let errMsg = "Upload failed. Please try again.";
+      try { const d = await fetchRes.json(); errMsg = d.error || errMsg; } catch (_) {}
+      overlay.style.display = "none";
+      showError(errMsg);
+      uploadBtn.disabled = false;
+      return;
+    }
+
+    // Parse SSE manually (fetch streams)
+    const reader  = fetchRes.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE messages end with "\n\n"
+      const messages = buffer.split("\n\n");
+      buffer = messages.pop(); // keep incomplete tail
+
+      for (const msg of messages) {
+        const dataLine = msg.split("\n").find(l => l.startsWith("data:"));
+        if (!dataLine) continue;
+
+        let payload;
+        try { payload = JSON.parse(dataLine.slice(5).trim()); } catch (_) { continue; }
+
+        if (payload.error) {
+          overlay.style.display = "none";
+          showError(payload.error);
+          uploadBtn.disabled = false;
+          return;
+        }
+
+        // Update UI
+        setProgress(payload.percent ?? 0);
+        setMainLabel(payload.label ?? "");
+        if (payload.stage) setStage(payload.stage);
+
+        if (payload.percent === 100 && payload.video_id) {
+          // Mark all stages done, then redirect
+          setStage(99);
+          setProgress(100);
+          setMainLabel("Analysis complete! Redirecting…");
+          setTimeout(() => {
+            window.location.href = `/analysis?video_id=${payload.video_id}`;
+          }, 600);
+          return;
+        }
+      }
+    }
+
+    // Stream ended without a done event — something went wrong
+    overlay.style.display = "none";
+    showError("Processing ended unexpectedly. Please try again.");
+    uploadBtn.disabled = false;
   });
 }

@@ -214,12 +214,40 @@
   </div>
 
   <div id="uploadOverlay" class="upload-overlay">
-
     <div class="loader-box">
 
-      <div class="spinner"></div>
+      <div class="progress-ring-wrap">
+        <svg class="progress-ring" viewBox="0 0 120 120">
+          <circle class="progress-ring__track" cx="60" cy="60" r="50"/>
+          <circle class="progress-ring__fill" id="progressRingFill" cx="60" cy="60" r="50"/>
+        </svg>
+        <span class="progress-ring__pct" id="progressPct">0%</span>
+      </div>
 
-      <p>Uploading & Analyzing your video...</p>
+      <p class="upload-main-label" id="uploadMainLabel">Preparing upload…</p>
+
+      <ul class="stage-list">
+        <li class="stage-item" id="stage-1" data-stage="1">
+          <span class="stage-dot"></span>
+          <span class="stage-text">Uploading video</span>
+          <span class="stage-check">✓</span>
+        </li>
+        <li class="stage-item" id="stage-2" data-stage="2">
+          <span class="stage-dot"></span>
+          <span class="stage-text">Analysing posture &amp; gestures</span>
+          <span class="stage-check">✓</span>
+        </li>
+        <li class="stage-item" id="stage-3" data-stage="3">
+          <span class="stage-dot"></span>
+          <span class="stage-text">Transcribing speech</span>
+          <span class="stage-check">✓</span>
+        </li>
+        <li class="stage-item" id="stage-4" data-stage="4">
+          <span class="stage-dot"></span>
+          <span class="stage-text">Analysing content</span>
+          <span class="stage-check">✓</span>
+        </li>
+      </ul>
 
     </div>
   </div>

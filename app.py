@@ -1,6 +1,7 @@
 import firebase_admin
 from firebase_admin import credentials, auth as firebase_auth
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response, stream_with_context
+import queue, threading, json as _json
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
@@ -1008,6 +1009,227 @@ def upload_video():
         "tag_name": tag.tag_name,
         "overall_score": overall_score
     })
+
+
+# ─────────────────────────────────────────
+# ROUTE — UPLOAD VIDEO (SSE progress)
+# ─────────────────────────────────────────
+
+@app.route("/api/upload-video-sse", methods=["POST"])
+def upload_video_sse():
+    """
+    Identical pipeline to /api/upload-video but streams progress events so
+    the browser can show per-stage feedback instead of a blank spinner.
+
+    SSE event format (text/event-stream):
+        data: {"stage": 1, "label": "Uploading video", "percent": 10}\n\n
+        ...
+        data: {"stage": 5, "label": "Done", "percent": 100, "video_id": 42}\n\n
+        data: {"error": "..."}\n\n   ← on failure
+    """
+
+    # ── auth ────────────────────────────────────────────────────────────────
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # ── size guard ──────────────────────────────────────────────────────────
+    MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024
+    if request.content_length and request.content_length > MAX_FILE_SIZE_BYTES:
+        return jsonify({"error": "File too large. Max size is 500 MB."}), 400
+
+    if "video" not in request.files:
+        return jsonify({"error": "No video file provided"}), 400
+
+    video_file = request.files["video"]
+
+    if not allowed_file(video_file.filename):
+        return jsonify({"error": "Invalid file type. Only mp4, mov, avi, webm allowed."}), 400
+
+    if not video_file.mimetype.startswith("video/"):
+        return jsonify({"error": "Uploaded file is not a valid video."}), 400
+
+    firebase_uid = request.form.get("firebase_uid")
+    tag_name     = request.form.get("tag_name") or "General"
+    video_title  = request.form.get("video_title") or "Untitled"
+    email        = request.form.get("email", "unknown@email.com")
+
+    if not firebase_uid:
+        return jsonify({"error": "firebase_uid missing"}), 400
+
+    # Read file bytes now — stream will be consumed inside the generator thread
+    video_bytes    = video_file.read()
+    video_filename = video_file.filename
+    video_mimetype = video_file.mimetype
+
+    # Queue used to pass results (or errors) from the worker thread back to
+    # the SSE generator.
+    result_q: queue.Queue = queue.Queue()
+
+    def _worker():
+        """Run the full pipeline in a background thread; push SSE messages."""
+
+        def emit(stage, label, percent, **extra):
+            payload = {"stage": stage, "label": label, "percent": percent, **extra}
+            result_q.put(("event", payload))
+
+        try:
+            # ── DB: user / tag ──────────────────────────────────────────────
+            with app.app_context():
+                user = User.query.filter_by(firebase_uid=firebase_uid).first()
+                if not user:
+                    user = User(firebase_uid=firebase_uid, email=email, name="User")
+                    db.session.add(user)
+                    db.session.commit()
+
+                tag = Tag.query.filter_by(user_id=user.id, tag_name=tag_name).first()
+                if not tag:
+                    tag = Tag(tag_name=tag_name, user_id=user.id)
+                    db.session.add(tag)
+                    db.session.commit()
+
+                # ── Stage 1: upload to Cloudinary ───────────────────────────
+                emit(1, "Uploading video", 10)
+
+                import io
+                stream = io.BytesIO(video_bytes)
+                try:
+                    result = cloudinary.uploader.upload_large(
+                        stream, resource_type="video"
+                    )
+                    cloudinary_url = result["secure_url"]
+                    public_id      = result["public_id"]
+                except Exception as e:
+                    result_q.put(("error", f"Cloudinary upload failed: {e}"))
+                    return
+
+                new_video = Video(
+                    video_title=video_title,
+                    cloudinary_url=cloudinary_url,
+                    cloudinary_public_id=public_id,
+                    user_id=user.id,
+                    tag_id=tag.id,
+                )
+                db.session.add(new_video)
+                db.session.commit()
+                video_id = new_video.id
+
+                emit(1, "Uploading video", 25)
+
+                # ── Stage 2: CV pipeline ────────────────────────────────────
+                emit(2, "Analysing posture and gestures", 35)
+
+                try:
+                    text, duration, silent, posture_score, gesture_score, eye_contact_score = (
+                        process_video_from_cloudinary(cloudinary_url)
+                    )
+                except Exception as e:
+                    db.session.delete(new_video)
+                    db.session.commit()
+                    try:
+                        cloudinary.uploader.destroy(public_id, resource_type="video")
+                    except Exception:
+                        pass
+                    result_q.put(("error", f"CV pipeline failed: {e}"))
+                    return
+
+                emit(2, "Analysing posture and gestures", 55)
+
+                # ── Stage 3: Whisper transcription ──────────────────────────
+                emit(3, "Transcribing speech", 65)
+
+                # (transcription already done inside process_video_from_cloudinary)
+
+                # ── Stage 4: Groq content analysis ──────────────────────────
+                emit(4, "Analysing content", 75)
+
+                if silent or len(text.split()) < 10:
+                    speech_rate = filler_words = 0
+                    vocabulary_score = confidence_score = 0.0
+                    topic_relevance_score = content_structure_score = 0.0
+                    topic_relevance_reason = content_structure_reason = "No speech detected."
+                else:
+                    speech_rate, filler_words = evaluate_text(text, duration)
+                    vocabulary_score  = score_vocabulary(text)
+                    confidence_score  = score_confidence_language(text, duration)
+                    content_result    = analyse_content_with_groq(text, video_title)
+                    topic_relevance_score    = content_result["topic_relevance_score"]
+                    content_structure_score  = content_result["content_structure_score"]
+                    topic_relevance_reason   = content_result["topic_relevance_reason"]
+                    content_structure_reason = content_result["content_structure_reason"]
+
+                emit(4, "Analysing content", 90)
+
+                # ── finalise scores + DB ────────────────────────────────────
+                speech_rate_score = score_speech_rate(speech_rate)
+                filler_score      = score_filler_words(filler_words, duration)
+
+                overall_score = round(
+                    eye_contact_score       * 0.20 +
+                    posture_score           * 0.15 +
+                    topic_relevance_score   * 0.15 +
+                    speech_rate_score       * 0.10 +
+                    filler_score            * 0.10 +
+                    vocabulary_score        * 0.10 +
+                    confidence_score        * 0.10 +
+                    content_structure_score * 0.05 +
+                    gesture_score           * 0.05,
+                    2,
+                )
+
+                analysis = Analysis(
+                    video_id=video_id,
+                    speech_rate=float(round(speech_rate, 2)),
+                    filler_words=int(filler_words),
+                    posture_score=float(posture_score),
+                    eye_contact_score=float(eye_contact_score),
+                    gesture_score=float(gesture_score),
+                    overall_score=float(overall_score),
+                    duration=float(round(duration, 2)),
+                    vocabulary_score=float(vocabulary_score),
+                    confidence_score=float(confidence_score),
+                    topic_relevance_score=float(topic_relevance_score),
+                    content_structure_score=float(content_structure_score),
+                    topic_relevance_reason=topic_relevance_reason,
+                    content_structure_reason=content_structure_reason,
+                )
+                db.session.add(analysis)
+                db.session.commit()
+
+                emit(5, "Done", 100, video_id=video_id)
+                result_q.put(("done", None))
+
+        except Exception as e:
+            result_q.put(("error", str(e)))
+
+    # Start worker
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+    def _sse_stream():
+        while True:
+            try:
+                kind, payload = result_q.get(timeout=300)  # 5-min hard timeout
+            except queue.Empty:
+                yield "data: {\"error\": \"Processing timed out\"}\n\n"
+                return
+
+            if kind == "event":
+                yield f"data: {_json.dumps(payload)}\n\n"
+            elif kind == "error":
+                yield f"data: {_json.dumps({'error': payload})}\n\n"
+                return
+            elif kind == "done":
+                return
+
+    return Response(
+        stream_with_context(_sse_stream()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx buffering
+        },
+    )
 
 
 # ─────────────────────────────────────────

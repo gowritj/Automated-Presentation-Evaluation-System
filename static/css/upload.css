@@ -478,22 +478,132 @@ body {
 .loader-box {
   text-align: center;
   color: white;
+  width: 320px;
 }
 
-.spinner {
-  width: 70px;
-  height: 70px;
-  border: 6px solid rgba(255, 255, 255, 0.2);
-  border-top: 6px solid #cbd5f5;
+/* ── progress ring ── */
+.progress-ring-wrap {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 24px;
+}
+
+.progress-ring {
+  width: 120px;
+  height: 120px;
+  transform: rotate(-90deg);
+}
+
+.progress-ring__track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 8;
+}
+
+.progress-ring__fill {
+  fill: none;
+  stroke: #a5b4fc;
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-dasharray: 314;   /* 2π × r = 2π × 50 ≈ 314 */
+  stroke-dashoffset: 314;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.progress-ring__pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #cbd5f5;
+}
+
+/* ── main label ── */
+.upload-main-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0 0 24px;
+  min-height: 22px;
+  transition: opacity 0.3s;
+}
+
+/* ── stage list ── */
+.stage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.stage-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.3s, border-color 0.3s;
+  font-size: 13.5px;
+  color: #64748b;
+}
+
+.stage-item.active {
+  background: rgba(165, 180, 252, 0.12);
+  border-color: rgba(165, 180, 252, 0.3);
+  color: #e2e8f0;
+}
+
+.stage-item.done {
+  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(52, 211, 153, 0.2);
+  color: #6ee7b7;
+}
+
+.stage-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 20px;
+  background: currentColor;
+  flex-shrink: 0;
+  opacity: 0.5;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.stage-item.active .stage-dot {
+  background: #a5b4fc;
+  opacity: 1;
+  box-shadow: 0 0 6px #a5b4fc;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+.stage-item.done .stage-dot {
+  opacity: 0;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%       { transform: scale(1.5); opacity: 0.7; }
+}
+
+.stage-text {
+  flex: 1;
+}
+
+.stage-check {
+  font-size: 14px;
+  color: #34d399;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.stage-item.done .stage-check {
+  opacity: 1;
 }
 
 .delete-video-btn {
