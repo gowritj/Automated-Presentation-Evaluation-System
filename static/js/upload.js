@@ -5,7 +5,6 @@ import {
   onAuthStateChanged,
   signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
 // ===============================
 // ERROR HANDLING (GLOBAL)
 // ===============================
@@ -358,3 +357,8 @@ if (form) {
     uploadBtn.disabled = false;
   });
 }
+
+import { loadEditProfileModal } from "./loadModal.js";
+document.addEventListener("DOMContentLoaded", () => {
+  loadEditProfileModal();
+});
