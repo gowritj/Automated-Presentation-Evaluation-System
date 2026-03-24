@@ -1,0 +1,65 @@
+version: "3.9"
+
+# ─────────────────────────────────────────
+# Local development stack
+# ─────────────────────────────────────────
+# Starts:
+#   • Redis (message broker + result backend)
+#   • Celery worker (runs the ML pipeline)
+#   • Flask web app  (serves the API + frontend)
+#
+# Usage:
+#   docker compose up          # start everything
+#   docker compose up --build  # rebuild images first
+#   docker compose down        # stop and remove containers
+#
+# In production, replace the Redis service with your managed Redis URL
+# (e.g. Redis Cloud, Upstash, Railway Redis) by setting REDIS_URL in .env.
+# ─────────────────────────────────────────
+
+services:
+  # ── Redis ──────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"          # expose for local inspection with redis-cli
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Celery worker ──────────────────────
+  worker:
+    build: .
+    command: >
+      celery -A celery_worker.celery_app worker
+        --loglevel=info
+        --concurrency=2
+        --queues=video_processing
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app                 # mount source so code changes hot-reload
+    restart: unless-stopped
+
+  # ── Flask web app ───────────────────────
+  web:
+    build: .
+    command: python app.py
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "5000:5000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped

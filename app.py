@@ -63,8 +63,8 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # Firebase Admin SDK — for server-side token verification
 cred = credentials.Certificate(os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH"))
-firebase_admin.initialize_app(cred)
-
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(cred)
 
 # ─────────────────────────────────────────
 # DATABASE MODELS
@@ -1585,6 +1585,181 @@ def analysis():
 @app.route("/analytics")
 def analytics():
     return render_template("analytics.html")
+
+
+
+
+# ASYNC VIDEO PROCESSING  (Celery + Redis)
+# ─────────────────────────────────────────
+# Import lazily so the app still starts if Redis is not configured — the
+# synchronous routes (/api/upload-video, /api/upload-video-sse) remain
+# fully functional without Celery.
+
+def _get_celery():
+    try:
+        import celery_worker
+        return celery_worker.celery_app
+    except Exception as e:
+        print("Celery import error:", e)   # 🔥 ADD THIS
+        return None
+
+
+@app.route("/api/upload-video-async", methods=["POST"])
+def upload_video_async():
+    """
+    Non-blocking upload endpoint.
+
+    1. Validates the token and file.
+    2. Uploads the video to Cloudinary.
+    3. Saves a Video row to the DB.
+    4. Dispatches a Celery task and returns immediately with {"job_id": "..."}.
+
+    The frontend polls /api/job-status/<job_id> every 5 seconds.
+    """
+    celery_app = _get_celery()
+    if celery_app is None:
+        return jsonify({
+            "error": "Async processing is not configured. "
+                     "Install celery + redis and set REDIS_URL."
+        }), 503
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    decoded_token = verify_firebase_token(request)
+    if not decoded_token:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # ── Size guard ────────────────────────────────────────────────────────────
+    MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024
+    if request.content_length and request.content_length > MAX_FILE_SIZE_BYTES:
+        return jsonify({"error": "File too large. Max size is 500 MB."}), 400
+
+    # ── File validation ───────────────────────────────────────────────────────
+    if "video" not in request.files:
+        return jsonify({"error": "No video file provided"}), 400
+
+    video_file = request.files["video"]
+
+    if not allowed_file(video_file.filename):
+        return jsonify({
+            "error": "Invalid file type. Only mp4, mov, avi, webm allowed."
+        }), 400
+
+    if not video_file.mimetype.startswith("video/"):
+        return jsonify({"error": "Uploaded file is not a valid video."}), 400
+
+    # ── Form data ─────────────────────────────────────────────────────────────
+    firebase_uid = request.form.get("firebase_uid")
+    tag_name     = request.form.get("tag_name") or "General"
+    video_title  = request.form.get("video_title") or "Untitled"
+    email        = request.form.get("email", "unknown@email.com")
+
+    if not firebase_uid:
+        return jsonify({"error": "firebase_uid missing"}), 400
+
+    # ── Upsert user + tag ─────────────────────────────────────────────────────
+    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+    if not user:
+        user = User(
+            firebase_uid=firebase_uid,
+            email=email,
+            name=request.form.get("name", "User"),
+        )
+        db.session.add(user)
+        db.session.commit()
+
+    tag = Tag.query.filter_by(user_id=user.id, tag_name=tag_name).first()
+    if not tag:
+        tag = Tag(tag_name=tag_name, user_id=user.id)
+        db.session.add(tag)
+        db.session.commit()
+
+    # ── Upload to Cloudinary ──────────────────────────────────────────────────
+    try:
+        result = cloudinary.uploader.upload_large(
+            video_file.stream,
+            resource_type="video",
+        )
+        cloudinary_url = result["secure_url"]
+        public_id      = result["public_id"]
+    except Exception as e:
+        print("CLOUDINARY ERROR:", e)
+        return jsonify({"error": str(e)}), 500
+
+    # ── Save Video row (Analysis is filled in by the Celery task) ─────────────
+    new_video = Video(
+        video_title=video_title,
+        cloudinary_url=cloudinary_url,
+        cloudinary_public_id=public_id,
+        user_id=user.id,
+        tag_id=tag.id,
+    )
+    db.session.add(new_video)
+    db.session.commit()
+
+    # ── Dispatch task ─────────────────────────────────────────────────────────
+    from celery_worker import process_video_task  # local import — keeps startup fast
+
+    task = process_video_task.delay(
+        video_id=new_video.id,
+        cloudinary_url=cloudinary_url,
+        video_title=video_title,
+    )
+
+    return jsonify({
+        "job_id":      task.id,
+        "video_id":    new_video.id,
+        "message":     "Upload successful. Processing has started.",
+        "poll_url":    f"/api/job-status/{task.id}",
+    }), 202
+
+
+@app.route("/api/job-status/<job_id>", methods=["GET"])
+def job_status(job_id):
+    """
+    Poll this endpoint every 5 seconds after calling /api/upload-video-async.
+
+    Response shape
+    ──────────────
+    While running:
+        { "state": "PROGRESS", "percent": 42, "label": "Analysing speech…" }
+
+    On success:
+        { "state": "SUCCESS", "result": { "video_id": 7, "overall_score": 83.4, … } }
+
+    On failure:
+        { "state": "FAILURE", "error": "…" }
+
+    PENDING means Celery hasn't picked up the task yet (worker not running
+    or queue is full) — the frontend should keep polling.
+    """
+    celery_app = _get_celery()
+    if celery_app is None:
+        return jsonify({"error": "Async processing is not configured."}), 503
+
+    from celery.result import AsyncResult
+
+    result = AsyncResult(job_id, app=celery_app)
+
+    if result.state == "PENDING":
+        return jsonify({"state": "PENDING", "percent": 0, "label": "Waiting in queue…"})
+
+    if result.state == "PROGRESS":
+        info = result.info or {}
+        return jsonify({
+            "state":   "PROGRESS",
+            "percent": info.get("percent", 0),
+            "label":   info.get("label", "Processing…"),
+            "stage":   info.get("stage", ""),
+        })
+
+    if result.state == "SUCCESS":
+        return jsonify({"state": "SUCCESS", "result": result.result})
+
+    # FAILURE or REVOKED
+    error_msg = str(result.info) if result.info else "Unknown error"
+    return jsonify({"state": result.state, "error": error_msg}), 500
+
+
 
 
 # ─────────────────────────────────────────
