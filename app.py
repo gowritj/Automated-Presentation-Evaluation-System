@@ -1549,13 +1549,38 @@ def analysis():
         a.content_structure_reason or ""
     )
 
+    # ── score comparison: find the previous video under the same tag ──────
+    prev_score = None
+    prev_title = None
+    score_diff = None
+    if video.tag_id:
+        prev_video = (
+            Video.query
+            .filter(
+                Video.tag_id  == video.tag_id,
+                Video.user_id == video.user_id,
+                Video.id      != video.id
+            )
+            .join(Video.analysis)
+            .order_by(Video.id.desc())
+            .first()
+        )
+        if prev_video and prev_video.analysis:
+            prev_score = round(prev_video.analysis.overall_score, 2)
+            prev_title = prev_video.video_title
+            score_diff = round(a.overall_score - prev_score, 2)
+
     return render_template(
         "analysis.html",
         video=video,
         analysis=a,
         tag_name=video.tag.tag_name,
-        feedback=feedback
+        feedback=feedback,
+        prev_score=prev_score,
+        prev_title=prev_title,
+        score_diff=score_diff,
     )
+
 
 @app.route("/analytics")
 def analytics():

@@ -67,7 +67,26 @@
             </a>
         </div>
 
-        <!-- Overall Score Section -->
+        <!-- Score Comparison Banner -->
+        {% if score_diff is not none %}
+        <div class="comparison-banner {% if score_diff > 0 %}improved{% elif score_diff < 0 %}declined{% else %}same{% endif %}">
+            <span class="comparison-icon">
+                {% if score_diff > 0 %}📈{% elif score_diff < 0 %}📉{% else %}➡️{% endif %}
+            </span>
+            <div class="comparison-text">
+                {% if score_diff > 0 %}
+                    <strong>+{{ score_diff }}% improvement</strong> since your last attempt
+                {% elif score_diff < 0 %}
+                    <strong>{{ score_diff }}% since your last attempt</strong> — keep practising!
+                {% else %}
+                    <strong>Same score</strong> as your last attempt — push for more!
+                {% endif %}
+                <span class="comparison-sub">Previous: {{ prev_title }} — {{ prev_score }}%</span>
+            </div>
+        </div>
+        {% endif %}
+
+                <!-- Overall Score Section -->
         <section class="performance-section">
             <h2 class="section-title">Overall Performance</h2>
 
