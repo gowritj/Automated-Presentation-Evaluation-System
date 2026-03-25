@@ -71,7 +71,7 @@
         {% if score_diff is not none %}
         <div class="comparison-banner {% if score_diff > 0 %}improved{% elif score_diff < 0 %}declined{% else %}same{% endif %}">
             <span class="comparison-icon">
-                {% if score_diff > 0 %}📈{% elif score_diff < 0 %}📉{% else %}➡️{% endif %}
+                {% if score_diff > 0 %}<img width="50" height="50" src="https://img.icons8.com/ios-filled/50/bullish.png" alt="📈" style="filter: invert(1);"/>{% elif score_diff < 0 %}<img width="50" height="50" src="https://img.icons8.com/ios-filled/50/bearish.png" alt="📉"  style="filter: invert(1);"/>{% else %}<img width="60" height="60" src="https://img.icons8.com/ios-glyphs/60/right--v1.png" alt="➡️" style="filter: invert(1);"/>{% endif %}
             </span>
             <div class="comparison-text">
                 {% if score_diff > 0 %}
