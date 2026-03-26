@@ -78,7 +78,22 @@ document.addEventListener("click", (e) => {
     profilePanel.classList.remove("active");
   }
 });
+let current = 0;
 
+const interval = setInterval(() => {
+    if (current >= score) {
+        current = score; // ✅ stop exactly
+        clearInterval(interval);
+    } else {
+        current += 0.5;
+    }
+
+    const offset = circumference - (current / 100) * circumference;
+    circle.style.strokeDashoffset = offset;
+
+    scoreElement.textContent = current.toFixed(1) + "%";
+
+}, 10);
 /* =========================
    LOGOUT FUNCTION
 ========================== */
@@ -92,3 +107,14 @@ import { loadEditProfileModal } from "./loadModal.js";
 document.addEventListener("DOMContentLoaded", () => {
   loadEditProfileModal();
 });
+const scoreElement = document.getElementById("percentageText");
+let score = parseFloat(scoreElement.dataset.score);
+
+// Safety clamp
+score = Math.min(Math.max(score, 0), 100);
+
+const circle = document.getElementById("progressCircle");
+const radius = 75;
+const circumference = 2 * Math.PI * radius;
+
+circle.style.strokeDasharray = circumference;

@@ -1,235 +1,354 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Analysis - PresenLytics</title>
 
     <link rel="stylesheet" href="../static/css/analysis.css" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Tektur:wght@400..900&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='assests/logo.png') }}">
-</head>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Tektur:wght@400..900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="{{ url_for('static', filename='assests/logo.png') }}"
+    />
+  </head>
 
-<body>
-
+  <body>
     <video class="bg-video" autoplay muted loop playsinline>
-        <source src="../static/assests/flow_gradient_remix.webm" type="video/webm">
+      <source
+        src="../static/assests/flow_gradient_remix.webm"
+        type="video/webm"
+      />
     </video>
 
     <!-- NAVBAR -->
     <header class="navbar">
-        <div class="navbar-left">
-            <div class="logo">
-                <img src="../static/assests/logo.png" alt="PresenLytics Logo">
-            </div>
-            <a href="/index" class="brand">PresenLytics</a>
+      <div class="navbar-left">
+        <div class="logo">
+          <img src="../static/assests/logo.png" alt="PresenLytics Logo" />
         </div>
+        <a href="/index" class="brand">PresenLytics</a>
+      </div>
 
-        <div class="navbar-right">
-            <div class="profile-icon" onclick="toggleProfile()">
-                <img src="../static/assests/profile.svg" alt="profile icon">
-            </div>
+      <div class="navbar-right">
+        <div class="profile-icon" onclick="toggleProfile()">
+          <img src="../static/assests/profile.svg" alt="profile icon" />
         </div>
+      </div>
     </header>
 
     <!-- PROFILE PANEL -->
     <aside class="profile-panel" id="profilePanel">
-        <h3>Your Profile</h3>
+      <h3>Your Profile</h3>
 
-        <p><strong>Name:</strong> <span id="userName">User</span></p>
-        <p><strong>Email:</strong> <span id="userEmail">user@email.com</span></p>
+      <p><strong>Name:</strong> <span id="userName">User</span></p>
+      <p><strong>Email:</strong> <span id="userEmail">user@email.com</span></p>
 
-        <hr />
+      <hr />
 
-        <p>Tags Created: <span id="profileTagCount">0</span></p>
-        <p>Videos Uploaded: <span id="profileVideoCount">0</span></p>
+      <p>Tags Created: <span id="profileTagCount">0</span></p>
+      <p>Videos Uploaded: <span id="profileVideoCount">0</span></p>
 
-        <button class="profile-btn" id="openEditProfile">Edit Profile</button>
-        <button class="profile-btn logout" onclick="logout()">Logout</button>
+      <button class="profile-btn" id="openEditProfile">Edit Profile</button>
+      <button class="profile-btn logout" onclick="logout()">Logout</button>
     </aside>
 
     <!-- MAIN CONTENT -->
     <main class="dashboard">
+      <!-- Header -->
+      <div class="analysis-header">
+        <div>
+          <h1>{{ video.video_title }}</h1>
+          <p class="tag-label">Tag: {{ tag_name }}</p>
+          <p class="subtitle">AI Performance Breakdown</p>
+        </div>
 
-        <!-- Header -->
-        <div class="analysis-header">
+        <a href="/existing-user" class="cta-upload-btn">
+          ← Back to Dashboard
+        </a>
+      </div>
+
+      <!-- Score Comparison Banner -->
+      {% if score_diff is not none %}
+      <div
+        class="comparison-banner {% if score_diff > 0 %}improved{% elif score_diff < 0 %}declined{% else %}same{% endif %}"
+      >
+        <span class="comparison-icon">
+          {% if score_diff > 0 %}<img
+            width="50"
+            height="50"
+            src="https://img.icons8.com/ios-filled/50/bullish.png"
+            alt="📈"
+            style="filter: invert(1)"
+          />{% elif score_diff < 0 %}<img
+            width="50"
+            height="50"
+            src="https://img.icons8.com/ios-filled/50/bearish.png"
+            alt="📉"
+            style="filter: invert(1)"
+          />{% else %}<img
+            width="60"
+            height="60"
+            src="https://img.icons8.com/ios-glyphs/60/right--v1.png"
+            alt="➡️"
+            style="filter: invert(1)"
+          />{% endif %}
+        </span>
+        <div class="comparison-text">
+          {% if score_diff > 0 %}
+          <strong>+{{ score_diff }}% improvement</strong> since your last
+          attempt {% elif score_diff < 0 %}
+          <strong>{{ score_diff }}% since your last attempt</strong> — keep
+          practising! {% else %} <strong>Same score</strong> as your last
+          attempt — push for more! {% endif %}
+          <span class="comparison-sub"
+            >Previous: {{ prev_title }} — {{ prev_score }}%</span
+          >
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Overall Score Section -->
+      <section class="performance-section">
+        <h2 class="section-title">Overall Performance</h2>
+
+        <div class="overall-layout">
+          <!-- Left Square Box -->
+          <div class="stat-card overall-box">
+            <div class="circle">
+              <svg width="180" height="180">
+                <!-- Gradient -->
+                <defs>
+                  <linearGradient
+                    id="gradient"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="0%"
+                  >
+                    <stop offset="0%" stop-color="#00c6ff" />
+                    <stop offset="100%" stop-color="#0072ff" />
+                  </linearGradient>
+                </defs>
+
+                <!-- Background circle -->
+                <circle cx="90" cy="90" r="75" class="bg"></circle>
+
+                <!-- Progress circle -->
+                <circle
+                  cx="90"
+                  cy="90"
+                  r="75"
+                  class="progress"
+                  id="progressCircle"
+                ></circle>
+              </svg>
+
+              <div
+                class="percentage"
+                id="percentageText"
+                data-score="{{ analysis.overall_score }}"
+              >
+                0%
+              </div>
+            </div>
+
+            <p>Overall Confidence Score</p>
+          </div>
+          <!-- Right Video Preview Box -->
+          <div class="video-box">
+            <video controls>
+              <source src="{{ video.cloudinary_url }}" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        </div>
+      </section>
+
+      <!-- Detailed Metrics -->
+      <section class="performance-section">
+        <h2 class="section-title">Detailed Metrics</h2>
+
+        <div class="stats-container">
+          <div class="stat-card">
+            <h2>{{ analysis.speech_rate }}</h2>
+            <p>Speech Rate (WPM)</p>
+          </div>
+
+          <div class="stat-card">
+            <h2>{{ analysis.filler_words }}</h2>
+            <p>Filler Words</p>
+          </div>
+
+          <div class="stat-card">
+            <h2>{{ analysis.posture_score }}%</h2>
+            <p>Posture Score</p>
+          </div>
+
+          <div class="stat-card">
+            <h2>{{ analysis.eye_contact_score }}%</h2>
+            <p>Eye Contact</p>
+          </div>
+
+          <div class="stat-card">
+            <h2>{{ analysis.gesture_score }}%</h2>
+            <p>Gesture Score</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Feedback Section -->
+      <section class="performance-section">
+        <h2 class="section-title">Why this score?</h2>
+
+        <div class="feedback-list">
+          <div class="feedback-item {{ feedback.eye_contact.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="60"
+                height="60"
+                src="https://img.icons8.com/ios-glyphs/60/visible--v1.png"
+                alt="👁️"
+                style="filter: invert(1)"
+            /></span>
             <div>
-                <h1>{{ video.video_title }}</h1>
-                <p class="tag-label">Tag: {{ tag_name }}</p>
-                <p class="subtitle">AI Performance Breakdown</p>
+              <p class="feedback-label">Eye Contact</p>
+              <p class="feedback-msg">{{ feedback.eye_contact.msg }}</p>
             </div>
+          </div>
 
-            <a href="/existing-user" class="cta-upload-btn">
-                ← Back to Dashboard
-            </a>
+          <div class="feedback-item {{ feedback.posture.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="50"
+                height="50"
+                src="https://img.icons8.com/ios-filled/50/men-age-group-4.png"
+                alt="🧍"
+                style="filter: invert(1)"
+            /></span>
+            <div>
+              <p class="feedback-label">Posture</p>
+              <p class="feedback-msg">{{ feedback.posture.msg }}</p>
+            </div>
+          </div>
+
+          <div class="feedback-item {{ feedback.speech_rate.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="50"
+                height="50"
+                src="https://img.icons8.com/ios-filled/50/voice-recognition-scan.png"
+                alt="🗣️"
+                style="filter: invert(1)"
+            /></span>
+            <div>
+              <p class="feedback-label">Speech Rate</p>
+              <p class="feedback-msg">{{ feedback.speech_rate.msg }}</p>
+            </div>
+          </div>
+
+          <div class="feedback-item {{ feedback.filler.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="60"
+                height="60"
+                src="https://img.icons8.com/ios-glyphs/60/abc.png"
+                alt="🔤"
+                style="filter: invert(1)"
+            /></span>
+            <div>
+              <p class="feedback-label">Filler Words</p>
+              <p class="feedback-msg">{{ feedback.filler.msg }}</p>
+            </div>
+          </div>
+
+          <div class="feedback-item {{ feedback.gesture.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="50"
+                height="50"
+                src="https://img.icons8.com/ios/50/scout-sign.png"
+                alt="🤙"
+                style="filter: invert(1)"
+            /></span>
+            <div>
+              <p class="feedback-label">Gestures</p>
+              <p class="feedback-msg">{{ feedback.gesture.msg }}</p>
+            </div>
+          </div>
+
+          <div class="feedback-item {{ feedback.vocabulary.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="50"
+                height="50"
+                src="https://img.icons8.com/ios/50/books.png"
+                alt="📚"
+                style="filter: invert(1)"
+            /></span>
+            <div>
+              <p class="feedback-label">Vocabulary</p>
+              <p class="feedback-msg">{{ feedback.vocabulary.msg }}</p>
+            </div>
+          </div>
+
+          <div class="feedback-item {{ feedback.confidence.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="50"
+                height="50"
+                src="https://img.icons8.com/ios/50/strength.png"
+                alt="💪"
+                style="filter: invert(1)"
+            /></span>
+            <div>
+              <p class="feedback-label">Confidence Language</p>
+              <p class="feedback-msg">{{ feedback.confidence.msg }}</p>
+            </div>
+          </div>
+
+          <div class="feedback-item {{ feedback.topic_relevance.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="50"
+                height="50"
+                src="https://img.icons8.com/ios/50/goal--v1.png"
+                alt="🎯"
+                style="filter: invert(1)"
+            /></span>
+            <div>
+              <p class="feedback-label">Topic Relevance</p>
+              <p class="feedback-msg">{{ feedback.topic_relevance.msg }}</p>
+            </div>
+          </div>
+
+          <div class="feedback-item {{ feedback.content_structure.status }}">
+            <span class="feedback-icon"
+              ><img
+                width="50"
+                height="50"
+                src="https://img.icons8.com/ios/50/parallel-tasks.png"
+                alt="🏗️"
+                style="filter: invert(1)"
+            /></span>
+            <div>
+              <p class="feedback-label">Content Structure</p>
+              <p class="feedback-msg">{{ feedback.content_structure.msg }}</p>
+            </div>
+          </div>
         </div>
-
-        <!-- Score Comparison Banner -->
-        {% if score_diff is not none %}
-        <div class="comparison-banner {% if score_diff > 0 %}improved{% elif score_diff < 0 %}declined{% else %}same{% endif %}">
-            <span class="comparison-icon">
-                {% if score_diff > 0 %}<img width="50" height="50" src="https://img.icons8.com/ios-filled/50/bullish.png" alt="📈" style="filter: invert(1);"/>{% elif score_diff < 0 %}<img width="50" height="50" src="https://img.icons8.com/ios-filled/50/bearish.png" alt="📉"  style="filter: invert(1);"/>{% else %}<img width="60" height="60" src="https://img.icons8.com/ios-glyphs/60/right--v1.png" alt="➡️" style="filter: invert(1);"/>{% endif %}
-            </span>
-            <div class="comparison-text">
-                {% if score_diff > 0 %}
-                    <strong>+{{ score_diff }}% improvement</strong> since your last attempt
-                {% elif score_diff < 0 %}
-                    <strong>{{ score_diff }}% since your last attempt</strong> — keep practising!
-                {% else %}
-                    <strong>Same score</strong> as your last attempt — push for more!
-                {% endif %}
-                <span class="comparison-sub">Previous: {{ prev_title }} — {{ prev_score }}%</span>
-            </div>
-        </div>
-        {% endif %}
-
-                <!-- Overall Score Section -->
-        <section class="performance-section">
-            <h2 class="section-title">Overall Performance</h2>
-
-            <div class="overall-layout">
-
-                <!-- Left Square Box -->
-                <div class="stat-card overall-box">
-                    <h2>{{ analysis.overall_score }}%</h2>
-                    <p>Overall Confidence Score</p>
-                </div>
-
-                <!-- Right Video Preview Box -->
-                <div class="video-box">
-                    <video controls>
-                        <source src="{{ video.cloudinary_url }}" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                </div>
-
-            </div>
-        </section>
-
-        <!-- Detailed Metrics -->
-        <section class="performance-section">
-            <h2 class="section-title">Detailed Metrics</h2>
-
-            <div class="stats-container">
-
-                <div class="stat-card">
-                    <h2>{{ analysis.speech_rate }}</h2>
-                    <p>Speech Rate (WPM)</p>
-                </div>
-
-                <div class="stat-card">
-                    <h2>{{ analysis.filler_words }}</h2>
-                    <p>Filler Words</p>
-                </div>
-
-                <div class="stat-card">
-                    <h2>{{ analysis.posture_score }}%</h2>
-                    <p>Posture Score</p>
-                </div>
-
-                <div class="stat-card">
-                    <h2>{{ analysis.eye_contact_score }}%</h2>
-                    <p>Eye Contact</p>
-                </div>
-
-                <div class="stat-card">
-                    <h2>{{ analysis.gesture_score }}%</h2>
-                    <p>Gesture Score</p>
-                </div>
-
-            </div>
-        </section>
-
-        <!-- Feedback Section -->
-        <section class="performance-section">
-            <h2 class="section-title">Why this score?</h2>
-
-            <div class="feedback-list">
-
-                <div class="feedback-item {{ feedback.eye_contact.status }}">
-                    <span class="feedback-icon"><img width="60" height="60" src="https://img.icons8.com/ios-glyphs/60/visible--v1.png" alt="👁️" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Eye Contact</p>
-                        <p class="feedback-msg">{{ feedback.eye_contact.msg }}</p>
-                    </div>
-                </div>
-
-                <div class="feedback-item {{ feedback.posture.status }}">
-                    <span class="feedback-icon"><img width="50" height="50" src="https://img.icons8.com/ios-filled/50/men-age-group-4.png" alt="🧍" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Posture</p>
-                        <p class="feedback-msg">{{ feedback.posture.msg }}</p>
-                    </div>
-                </div>
-
-                <div class="feedback-item {{ feedback.speech_rate.status }}">
-                    <span class="feedback-icon"><img width="50" height="50" src="https://img.icons8.com/ios-filled/50/voice-recognition-scan.png" alt="🗣️" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Speech Rate</p>
-                        <p class="feedback-msg">{{ feedback.speech_rate.msg }}</p>
-                    </div>
-                </div>
-
-                <div class="feedback-item {{ feedback.filler.status }}">
-                    <span class="feedback-icon"><img width="60" height="60" src="https://img.icons8.com/ios-glyphs/60/abc.png" alt="🔤" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Filler Words</p>
-                        <p class="feedback-msg">{{ feedback.filler.msg }}</p>
-                    </div>
-                </div>
-
-                <div class="feedback-item {{ feedback.gesture.status }}">
-                    <span class="feedback-icon"><img width="50" height="50" src="https://img.icons8.com/ios/50/scout-sign.png" alt="🤙" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Gestures</p>
-                        <p class="feedback-msg">{{ feedback.gesture.msg }}</p>
-                    </div>
-                </div>
-
-                <div class="feedback-item {{ feedback.vocabulary.status }}">
-                    <span class="feedback-icon"><img width="50" height="50" src="https://img.icons8.com/ios/50/books.png" alt="📚" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Vocabulary</p>
-                        <p class="feedback-msg">{{ feedback.vocabulary.msg }}</p>
-                    </div>
-                </div>
-
-                <div class="feedback-item {{ feedback.confidence.status }}">
-                    <span class="feedback-icon"><img width="50" height="50" src="https://img.icons8.com/ios/50/strength.png" alt="💪" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Confidence Language</p>
-                        <p class="feedback-msg">{{ feedback.confidence.msg }}</p>
-                    </div>
-                </div>
-
-                <div class="feedback-item {{ feedback.topic_relevance.status }}">
-                    <span class="feedback-icon"><img width="50" height="50" src="https://img.icons8.com/ios/50/goal--v1.png" alt="🎯" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Topic Relevance</p>
-                        <p class="feedback-msg">{{ feedback.topic_relevance.msg }}</p>
-                    </div>
-                </div>
-
-                <div class="feedback-item {{ feedback.content_structure.status }}">
-                    <span class="feedback-icon"><img width="50" height="50" src="https://img.icons8.com/ios/50/parallel-tasks.png" alt="🏗️" style="filter: invert(1);"/></span>
-                    <div>
-                        <p class="feedback-label">Content Structure</p>
-                        <p class="feedback-msg">{{ feedback.content_structure.msg }}</p>
-                    </div>
-                </div>
-
-            </div>
-        </section>
-
+      </section>
     </main>
 
     <div id="modalContainer"></div>
 
     <script type="module" src="../static/js/analysis.js"></script>
-
-</body>
-
+  </body>
 </html>

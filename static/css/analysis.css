@@ -383,3 +383,39 @@ body {
   font-size: 12px;
   opacity: 0.65;
 }
+.circle {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    margin: 10px auto;
+}
+
+svg {
+    transform: rotate(-90deg);
+}
+
+circle {
+    fill: none;
+    stroke-width: 10;
+}
+
+.bg {
+    stroke: rgba(255, 255, 255, 0.1);
+}
+
+.progress {
+    stroke: url(#gradient);
+    stroke-linecap: round;
+    stroke-dasharray: 471; /* 2πr = 2 * 3.14 * 75 */
+    stroke-dashoffset: 471;
+}
+
+.percentage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 28px;
+    font-weight: bold;
+    color: white;
+}
