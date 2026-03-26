@@ -411,3 +411,8 @@ if (form) {
     }
   });
 }
+
+import { loadEditProfileModal } from "./loadModal.js";
+document.addEventListener("DOMContentLoaded", () => {
+  loadEditProfileModal();
+});
