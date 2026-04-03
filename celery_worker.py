@@ -28,7 +28,7 @@ from moviepy import VideoFileClip
 # scoring algorithm.  Flask's application context is NOT needed for any of
 # these functions — they are pure Python / numpy / mediapipe code.
 from app import (
-    app as flask_app,          # needed only to push an app context for SQLAlchemy
+    app as flask_app,         
     db,
     Video,
     Analysis,
@@ -47,49 +47,42 @@ from app import (
 
 load_dotenv()
 
-# ─────────────────────────────────────────
 # CELERY CONFIG
-# ─────────────────────────────────────────
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 if not REDIS_URL:
     raise ValueError("REDIS_URL is not set!")
 celery_app = Celery(
     "presentation_eval",
-    broker=REDIS_URL,
-    backend=REDIS_URL,
+    broker=REDIS_URL, #task stored redis
+    backend=REDIS_URL,  #result
 )
 
 
 celery_app.conf.broker_use_ssl = {"ssl_cert_reqs": ssl.CERT_NONE}
 celery_app.conf.redis_backend_use_ssl = {"ssl_cert_reqs": ssl.CERT_NONE}
 celery_app.conf.update(
-    # Serialisation
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    # Results live for 24 hours — long enough for any reasonable frontend poll
     result_expires=86400,
-    # Retry a failed task once after 60 seconds before giving up
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    
     # Route all tasks to the default queue
     task_default_queue="video_processing",
-    # Timezone
     timezone="UTC",
     enable_utc=True,
 )
 
 
-# ─────────────────────────────────────────
 # THE ASYNC TASK
-# ─────────────────────────────────────────
 
 @celery_app.task(
-    bind=True,
+    bind=True, #self
     max_retries=1,
-    soft_time_limit=600,   # 10 min soft limit  → raises SoftTimeLimitExceeded
-    time_limit=660,        # 11 min hard limit   → SIGKILL
+    soft_time_limit=600,   
+    time_limit=660,        
     name="process_video",
 )
 def process_video_task(self, video_id: int, cloudinary_url: str, video_title: str):
@@ -108,14 +101,13 @@ def process_video_task(self, video_id: int, cloudinary_url: str, video_title: st
     """
 
     def _update(stage: str, percent: int, label: str):
-        """Push a progress update visible via AsyncResult.info."""
+        """progress update """
         self.update_state(
             state="PROGRESS",
             meta={"stage": stage, "percent": percent, "label": label},
         )
 
     try:
-        # ── Stage 1: Download + run CV pipelines ─────────────────────────────
         _update("cv", 10, "Downloading video…")
         (
             text,
@@ -126,7 +118,6 @@ def process_video_task(self, video_id: int, cloudinary_url: str, video_title: st
             eye_contact_score,
         ) = process_video_from_cloudinary(cloudinary_url)
 
-        # ── Stage 2: Speech analysis ──────────────────────────────────────────
         _update("speech", 55, "Analysing speech…")
         if silent or len(text.split()) < 10:
             speech_rate = filler_words = 0
@@ -138,7 +129,6 @@ def process_video_task(self, video_id: int, cloudinary_url: str, video_title: st
             vocabulary_score = score_vocabulary(text)
             confidence_score = score_confidence_language(text, duration)
 
-            # ── Stage 3: Groq content analysis ───────────────────────────────
             _update("groq", 70, "Scoring content with AI…")
             content_result = analyse_content_with_groq(text, video_title)
             topic_relevance_score = content_result["topic_relevance_score"]
@@ -146,7 +136,6 @@ def process_video_task(self, video_id: int, cloudinary_url: str, video_title: st
             topic_relevance_reason = content_result["topic_relevance_reason"]
             content_structure_reason = content_result["content_structure_reason"]
 
-        # ── Stage 4: Compute overall score ───────────────────────────────────
         _update("scoring", 85, "Computing overall score…")
         speech_rate_score = score_speech_rate(speech_rate)
         filler_score = score_filler_words(filler_words, duration)
@@ -166,7 +155,6 @@ def process_video_task(self, video_id: int, cloudinary_url: str, video_title: st
             2,
         )
 
-        # ── Stage 5: Persist to DB ────────────────────────────────────────────
         _update("db", 93, "Saving results…")
         with flask_app.app_context():
             analysis = Analysis(
@@ -206,7 +194,6 @@ def process_video_task(self, video_id: int, cloudinary_url: str, video_title: st
         return result
 
     except Exception as exc:
-        # On failure, mark the Video row so the frontend knows to clean up
         with flask_app.app_context():
             video = db.session.get(Video, video_id)
             if video:
@@ -215,5 +202,4 @@ def process_video_task(self, video_id: int, cloudinary_url: str, video_title: st
                 db.session.delete(video)
                 db.session.commit()
 
-        # Celery will store this exception in the result backend
         raise exc

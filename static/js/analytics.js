@@ -110,7 +110,8 @@ async function loadTagAnalytics(firebase_uid, tag, token) {
   );
 
   const data = await response.json();
-
+  console.log("FULL DATA:", data);
+  console.log("VIDEOS:", data.videos);
   if (!data.videos || data.videos.length === 0) {
     const statsSection = document.querySelector(".performance-section");
     const chartsSection = document.querySelector(".recent-section");
@@ -178,7 +179,7 @@ async function loadTagAnalytics(firebase_uid, tag, token) {
         {
           label: "Vocabulary",
           data: videos.map(v => v.vocabulary_score),
-          borderColor: "#86efac",
+          borderColor: "#ff0000",
           backgroundColor: "transparent",
           tension: 0.4
         },
@@ -233,7 +234,7 @@ async function loadTagAnalytics(firebase_uid, tag, token) {
         </button>
       </div>
       <p class="video-date">Uploaded on: ${video.upload_date}</p>
-      <p class="video-score">Confidence Score: ${video.overall_score}%</p>
+      <p class="video-score">Overall Score: ${video.overall_score}%</p>
     `;
 
     card.addEventListener("click", () => {

@@ -20,18 +20,18 @@ import numpy as np
 from groq import Groq
 import json
 load_dotenv()
-# ─────────────────────────────────────────
+
 # FILE VALIDATION
-# ─────────────────────────────────────────
+
 
 ALLOWED_EXTENSIONS = {"mp4", "mov", "avi", "webm"}
 MAX_FILE_SIZE_MB = 500
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-# ─────────────────────────────────────────
+
 # CLOUDINARY CONFIG
-# ─────────────────────────────────────────
+
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
@@ -41,9 +41,8 @@ cloudinary.config(
 app = Flask(__name__)
 CORS(app)
 
-# ─────────────────────────────────────────
 # DATABASE CONFIG
-# ─────────────────────────────────────────
+
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
@@ -59,16 +58,15 @@ db = SQLAlchemy(app)
 model = whisper.load_model("tiny")
 
 # Groq client for content analysis — free LLM API
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 # Firebase Admin SDK — for server-side token verification
+
 cred = credentials.Certificate(os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH"))
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 
-# ─────────────────────────────────────────
 # DATABASE MODELS
-# ─────────────────────────────────────────
 
 class User(db.Model):
     __tablename__ = "users"
@@ -126,9 +124,8 @@ class Analysis(db.Model):
     content_structure_reason = db.Column(db.Text)
 
 
-# ─────────────────────────────────────────
+
 # VIDEO PROCESSING — MAIN PIPELINE
-# ─────────────────────────────────────────
 
 def process_video_from_cloudinary(video_url):
     """
@@ -142,22 +139,23 @@ def process_video_from_cloudinary(video_url):
     temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
     for chunk in response.iter_content(chunk_size=8192):
         temp_video.write(chunk)
-    temp_video.close()  # Must close before OpenCV/ffmpeg reads it
+    temp_video.close()  
 
     video_path = temp_video.name
     try:
-        # Run all three CV pipelines on the same video file
+                # Run all three CV pipelines on the same video file
+
         posture_score = calculate_posture(video_path)
         gesture_score = calculate_gesture(video_path)
         eye_contact_score = calculate_eye_contact(video_path)
 
-        # Extract audio for Whisper transcription
+        # Extract audio 
         video = VideoFileClip(video_path)
         temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         audio_path = temp_audio.name
         temp_audio.close()
 
-        # Handle videos with no audio track at all
+         # Handle videos with no audio track at all
         if video.audio is None:
             duration = video.duration
             video.close()
@@ -165,7 +163,7 @@ def process_video_from_cloudinary(video_url):
 
         video.audio.write_audiofile(audio_path)
 
-        # Check if audio is essentially silent (volume too low for Whisper)
+        # Check if volume too low 
         audio = video.audio
         volume = audio.max_volume()
         silent = volume < 0.01
@@ -173,7 +171,7 @@ def process_video_from_cloudinary(video_url):
         duration = video.duration
         video.close()
 
-        # Transcribe audio using Whisper
+        # Transcribe audio 
         result = model.transcribe(audio_path)
         text = result["text"]
 
@@ -182,17 +180,17 @@ def process_video_from_cloudinary(video_url):
         return text, duration, silent, posture_score, gesture_score, eye_contact_score
 
     finally:
-        # Always clean up temp video file even if something crashes
+                # Always clean up temp video file even if something crashes
+
         if os.path.exists(video_path):
             os.remove(video_path)
 
 
-# ─────────────────────────────────────────
 # SPEECH ANALYSIS
-# ─────────────────────────────────────────
+
 
 def evaluate_text(text, duration):
-    """
+     """
     Computes speech rate (WPM) and counts filler words
     from the Whisper transcript.
     """
@@ -204,6 +202,7 @@ def evaluate_text(text, duration):
 
     # Use word boundary regex to avoid false matches
     # e.g. "like" should not match inside "likewise" or "unlikely"
+    
     filler_words = 0
     for word in filler_list:
         filler_words += len(re.findall(rf'\b{word}\b', text.lower()))
@@ -212,7 +211,7 @@ def evaluate_text(text, duration):
 
 
 def score_speech_rate(wpm):
-    """
+   """
     Converts WPM into a 0-100 score using a smooth linear curve.
     Ideal range is 120-150 WPM.
     Below 120: score drops linearly to 0 at 60 WPM.
@@ -224,21 +223,20 @@ def score_speech_rate(wpm):
     if 120 <= wpm <= 150:
         return 100.0
     if wpm < 120:
-        # Too slow — linear drop from 100 at 120 WPM to 0 at 60 WPM
+        # Too slow 
         return max(0.0, round((wpm - 60) / (120 - 60) * 100, 2))
-    # Too fast — linear drop from 100 at 150 WPM to 0 at 220 WPM
+    # Too fast 
     return max(0.0, round((220 - wpm) / (220 - 150) * 100, 2))
 
 
 def score_filler_words(filler_count, duration_seconds):
     """
-    Converts filler word count into a 0-100 score.
-    Normalised per minute so short and long videos are treated fairly.
-    < 1 per minute  → 100 (excellent)
-    < 3 per minute  → 80  (good)
-    < 6 per minute  → 60  (acceptable)
-    < 10 per minute → 40  (needs work)
-    10+ per minute  → 20  (poor)
+    Converts filler word count into 0-100 score.
+    < 1 per minute  =100 
+    < 3 per minute  = 80
+    < 6 per minute= 60 
+    < 10 per minute=40
+    10+ per minute  = 20
     """
     duration_minutes = duration_seconds / 60 if duration_seconds > 0 else 1
     fillers_per_minute = filler_count / duration_minutes
@@ -263,38 +261,55 @@ def score_vocabulary(text):
     words = re.findall(r'\b[a-z]+\b', text.lower())
     if len(words) == 0:
         return 0.0
-    unique_ratio = len(set(words)) / len(words)
-    # Linear scale: 0.2 ratio = 0 score, 0.5 ratio = 100 score
-    score = max(0.0, min(100.0, (unique_ratio - 0.2) / (0.5 - 0.2) * 100))
-    return round(score, 2)
 
+    unique_ratio = len(set(words)) / len(words)
+
+    # Base score
+    score = unique_ratio * 100
+    
+    if unique_ratio > 0.6:
+        score -= (unique_ratio - 0.6) * 50
+
+    if unique_ratio < 0.4:
+        score -= (0.4 - unique_ratio) * 50
+
+    # Penalize short speech
+    if len(words) < 50:
+        score -= 10
+    return round(max(0, min(100, score)), 2)
 
 def score_confidence_language(text, duration_seconds):
-    """
-    Detects weak/hedging language that signals low confidence.
-    Normalised per minute so short and long videos are treated fairly.
-    """
+    
     weak_phrases = [
-        "i think", "i guess", "i'm not sure", "i am not sure",
-        "maybe", "perhaps", "kind of", "sort of", "i don't know",
-        "i do not know", "a little bit", "i feel like",
-        "probably", "might be", "not really sure"
+        "i think", "i guess", "i'm not sure", "maybe", "perhaps",
+        "kind of", "sort of", "i don't know", "probably", "might be"
     ]
     text_lower = text.lower()
-    count = sum(text_lower.count(phrase) for phrase in weak_phrases)
+    weak_count = sum(text_lower.count(p) for p in weak_phrases)
+    filler_list = ["um", "uh", "like", "actually", "basically"]
+    filler_count = sum(len(re.findall(rf'\b{w}\b', text_lower)) for w in filler_list)
+    words = text.split()
     duration_minutes = duration_seconds / 60 if duration_seconds > 0 else 1
-    per_minute = count / duration_minutes
-
-    if per_minute < 1:
-        return 100.0
-    elif per_minute < 2:
-        return 80.0
-    elif per_minute < 4:
-        return 60.0
-    elif per_minute < 7:
-        return 40.0
+    wpm = len(words) / duration_minutes if duration_minutes > 0 else 0
+    words_clean = re.findall(r'\b[a-z]+\b', text_lower)
+    unique_ratio = len(set(words_clean)) / len(words_clean) if words_clean else 0
+    weak_score = max(0, 100 - (weak_count * 15))
+    filler_score = max(0, 100 - (filler_count * 5))
+    if 120 <= wpm <= 150:
+        rate_score = 100
+    elif wpm < 120:
+        rate_score = max(0, (wpm / 120) * 100)
     else:
-        return 20.0
+        rate_score = max(0, (200 - wpm) / 50 * 100)
+
+    vocab_score = min(100, unique_ratio * 200)  # scale up
+    confidence = (
+        0.3 * weak_score +
+        0.2 * filler_score +
+        0.3 * rate_score +
+        0.2 * vocab_score
+    )
+    return round(max(0, min(100, confidence)), 2)
 
 
 def analyse_content_with_groq(transcript, topic):
@@ -304,6 +319,7 @@ def analyse_content_with_groq(transcript, topic):
     Single API call returns both scores to save on rate limits.
     Falls back to 0 with error message if API call fails.
     """
+
     prompt = f"""You are an expert presentation coach. Analyse this speech transcript and return a JSON object only — no explanation, no markdown, just raw JSON.
 
 Topic the speaker was supposed to present on: "{topic}"
@@ -331,7 +347,6 @@ Scoring guide:
             temperature=0.1
         )
         raw = response.choices[0].message.content.strip()
-        # Strip markdown code fences if model wraps response in them
         raw = re.sub(r'```json|```', '', raw).strip()
         result = json.loads(raw)
         return {
@@ -342,7 +357,6 @@ Scoring guide:
         }
     except Exception as e:
         print("Groq API error:", e)
-        # Return a clear error payload so the caller knows analysis failed
         return {
             "topic_relevance_score": 0.0,
             "topic_relevance_reason": f"Analysis unavailable: {str(e)[:80]}",
@@ -350,9 +364,7 @@ Scoring guide:
             "content_structure_reason": f"Analysis unavailable: {str(e)[:80]}"
         }
 
-# ─────────────────────────────────────────
 # POSTURE ANALYSIS
-# ─────────────────────────────────────────
 
 def calculate_posture(video_path):
     """
@@ -378,7 +390,7 @@ def calculate_posture(video_path):
     posture_scores = []
     slouch_frames = 0
     total_frames = 0
-    sampled_frames = 0  # only counts frames where landmarks were confidently detected
+    sampled_frames = 0  
     prev_shoulder_y = None
 
     while cap.isOpened():
@@ -413,7 +425,7 @@ def calculate_posture(video_path):
             sampled_frames += 1
             score = 0
 
-            # ─── 1. Shoulder alignment (30%) ───────────────────────
+            # Shoulder alignment (30%) 
             # Checks if shoulders are level — tilting sideways loses points
             shoulder_diff = abs(left_shoulder.y - right_shoulder.y)
             if shoulder_diff < 0.04:
@@ -421,7 +433,7 @@ def calculate_posture(video_path):
             elif shoulder_diff < 0.08:
                 score += 15
 
-            # ─── 2. Head alignment (20%) ────────────────────────────
+            #Head alignment (20%) 
             # Checks if head is centered over shoulders horizontally
             mid_x = (left_shoulder.x + right_shoulder.x) / 2
             head_offset = abs(nose.x - mid_x)
@@ -430,11 +442,12 @@ def calculate_posture(video_path):
             elif head_offset < 0.08:
                 score += 10
 
-            # ─── 3. Ear-shoulder angle / slouch detection (30%) ─────
+           # ─── 3. Ear-shoulder angle / slouch detection (30%) ─────
             # Replaces hip-based spine angle for seated webcam use.
             # The vector from shoulder midpoint to ear midpoint should
             # point straight up when sitting upright. If slouching forward,
-            # ears drop toward shoulders and the angle increases.
+            # ears drop toward shoulders and the angle increases. 
+          
             shoulder_mid = np.array([
                 (left_shoulder.x + right_shoulder.x) / 2,
                 (left_shoulder.y + right_shoulder.y) / 2
@@ -445,7 +458,7 @@ def calculate_posture(video_path):
             ])
 
             neck_vector = ear_mid - shoulder_mid
-            vertical_vector = np.array([0, -1])  # upward in image coords (Y increases downward)
+            vertical_vector = np.array([0, -1])  
 
             cos_angle = np.dot(neck_vector, vertical_vector) / (
                 np.linalg.norm(neck_vector) * np.linalg.norm(vertical_vector) + 1e-6
@@ -458,21 +471,23 @@ def calculate_posture(video_path):
             elif angle < 25:
                 score += 15
             else:
-                slouch_frames += 1  # counts toward slouch penalty
+                slouch_frames += 1 
 
             # ─── 4. Forward head posture (10%) ──────────────────────
             # Replaces z-axis lean (unreliable on webcams).
             # Nose Y should be well above shoulder Y in image coords.
             # If nose.y approaches shoulder.y, the head is drooping forward.
+            
             nose_to_shoulder_y = nose.y - (left_shoulder.y + right_shoulder.y) / 2
             if nose_to_shoulder_y < -0.15:
-                score += 10  # head well above shoulders — good upright posture
+                score += 10 
             elif nose_to_shoulder_y < -0.08:
-                score += 5   # slightly low but acceptable
+                score += 5   
 
-            # ─── 5. Stability (10%) ─────────────────────────────────
+             # ─── 5. Stability (10%) ─────────────────────────────────
             # Penalises excessive swaying or bouncing by tracking
             # how much shoulder height changes between sampled frames
+           
             shoulder_mid_y = (left_shoulder.y + right_shoulder.y) / 2
             if prev_shoulder_y is not None:
                 movement = abs(shoulder_mid_y - prev_shoulder_y)
@@ -491,7 +506,6 @@ def calculate_posture(video_path):
 
     final_score = float(np.mean(posture_scores))
 
-    # Apply slouch penalty based on proportion of bad posture frames
     slouch_ratio = (slouch_frames / sampled_frames) * 100 if sampled_frames else 0
     if slouch_ratio < 10:
         penalty = 0
@@ -503,14 +517,12 @@ def calculate_posture(video_path):
         penalty = 20
 
     final_score = final_score - penalty
-    final_score = max(0, min(100, final_score))  # clamp to 0-100
+    final_score = max(0, min(100, final_score))  
 
     return round(final_score, 2)
 
 
-# ─────────────────────────────────────────
 # GESTURE ANALYSIS
-# ─────────────────────────────────────────
 
 def calculate_gesture(video_path):
     """
@@ -547,7 +559,6 @@ def calculate_gesture(video_path):
 
         total_frames += 1
 
-        # Sample every 10th frame for performance
         if total_frames % 10 != 0:
             continue
 
@@ -559,13 +570,12 @@ def calculate_gesture(video_path):
             gesture_frames += 1
 
             for hand in results.multi_hand_landmarks:
-                # Use average of all 21 landmarks instead of just wrist (landmark[0])
+ # Use average of all 21 landmarks instead of just wrist (landmark[0])
                 # Gives a more accurate representation of overall hand position
                 xs = [lm.x for lm in hand.landmark]
                 ys = [lm.y for lm in hand.landmark]
                 current_positions.append(np.array([np.mean(xs), np.mean(ys)]))
 
-            # Track movement between frames
             if prev_positions and current_positions:
                 for i in range(min(len(prev_positions), len(current_positions))):
                     movement = np.linalg.norm(current_positions[i] - prev_positions[i])
@@ -573,7 +583,6 @@ def calculate_gesture(video_path):
                     if movement > 0.02:
                         active_frames += 1
 
-            # Track spread between both hands when both are visible
             if len(current_positions) == 2:
                 spread = np.linalg.norm(current_positions[0] - current_positions[1])
                 spread_values.append(spread)
@@ -585,31 +594,25 @@ def calculate_gesture(video_path):
     if total_frames == 0:
         return 0.0
 
-    # Use sampled frame count for accurate percentages
     sampled_frames = total_frames // 10 if total_frames else 1
 
-    # Presence: what fraction of sampled frames had hands visible
     presence_score = (gesture_frames / sampled_frames) * 100
 
-    # Movement: what fraction of sampled frames had active hand movement
     movement_score = (active_frames / sampled_frames) * 100 if movement_values else 0
 
-    # Movement quality: ideal is smooth, deliberate movement (not static, not shaky)
     if movement_values:
         avg_movement = np.mean(movement_values)
         if 0.02 < avg_movement < 0.08:
-            quality_score = 100  # ideal — smooth deliberate gestures
+            quality_score = 100  # ideal 
         elif avg_movement < 0.02:
-            quality_score = 40   # too static — hands barely moving
+            quality_score = 40   # static 
         else:
-            quality_score = 50   # too shaky — excessive nervous movement
+            quality_score = 50   # shaky
     else:
         quality_score = 0
 
-    # Frequency: how regularly gestures appear (target ~60% of frames)
     frequency_score = min(100, (gesture_frames / (sampled_frames * 0.6)) * 100)
 
-    # Hand spread: wide open gestures are more expressive than closed hands
     if spread_values:
         avg_spread = np.mean(spread_values)
         if avg_spread > 0.2:
@@ -632,12 +635,10 @@ def calculate_gesture(video_path):
     return float(round(final_score, 2))
 
 
-# ─────────────────────────────────────────
 # EYE CONTACT ANALYSIS
-# ─────────────────────────────────────────
 
 def calculate_eye_contact(video_path):
-    """
+   """
     Analyses eye contact using MediaPipe Face Mesh with iris tracking.
     refine_landmarks=True must be set to enable iris landmarks (468, 473).
 
@@ -655,8 +656,8 @@ def calculate_eye_contact(video_path):
     """
     mp_face_mesh = mp.solutions.face_mesh
     face_mesh = mp_face_mesh.FaceMesh(
-        refine_landmarks=True,  # REQUIRED — enables iris landmarks 468 and 473
-        max_num_faces=1         # only track the presenter, ignore background faces
+        refine_landmarks=True,  
+        max_num_faces=1         
     )
 
     cap = cv2.VideoCapture(video_path)
@@ -671,7 +672,6 @@ def calculate_eye_contact(video_path):
 
         total_frames += 1
 
-        # Sample every 10th frame for performance
         if total_frames % 10 != 0:
             continue
 
@@ -682,7 +682,7 @@ def calculate_eye_contact(video_path):
             sampled_frames += 1
             landmarks = results.multi_face_landmarks[0].landmark
 
-            # Iris centers (only available with refine_landmarks=True)
+            # Iris centers 
             left_iris  = landmarks[468]
             right_iris = landmarks[473]
 
@@ -692,7 +692,6 @@ def calculate_eye_contact(video_path):
             right_eye_outer = landmarks[362]
             right_eye_inner = landmarks[263]
 
-            # Calculate how centered each iris is within its eye (0 = perfect center)
             left_eye_width  = abs(left_eye_outer.x - left_eye_inner.x)
             right_eye_width = abs(right_eye_outer.x - right_eye_inner.x)
 
@@ -706,7 +705,7 @@ def calculate_eye_contact(video_path):
 
             avg_offset = (left_iris_offset + right_iris_offset) / 2
 
-            # Offset < 0.15 means iris is close enough to center = looking at camera
+            # offset < 0.15  iris center 
             if avg_offset < 0.15:
                 eye_contact_frames += 1
 
@@ -730,7 +729,7 @@ def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score,
     """
     feedback = {}
 
-    # Speech rate feedback
+    
     if speech_rate <= 0:
         feedback["speech_rate"] = {"status": "warning", "msg": "No speech detected."}
     elif speech_rate < 80:
@@ -791,7 +790,6 @@ def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score,
     else:
         feedback["confidence"] = {"status": "bad", "msg": "Too much uncertain language. Speak with more conviction."}
 
-    # Topic relevance — use Groq's reason directly
     if topic_relevance_score >= 75:
         status = "good"
     elif topic_relevance_score >= 50:
@@ -800,7 +798,6 @@ def build_feedback(speech_rate, filler_words, posture_score, eye_contact_score,
         status = "bad"
     feedback["topic_relevance"] = {"status": status, "msg": topic_relevance_reason}
 
-    # Content structure — use Groq's reason directly
     if content_structure_score >= 75:
         status = "good"
     elif content_structure_score >= 50:
@@ -834,9 +831,7 @@ def verify_firebase_token(request):
         return None
 
 
-# ─────────────────────────────────────────
 # ROUTES — VIDEO UPLOAD & ANALYSIS
-# ─────────────────────────────────────────
 
 @app.route("/api/upload-video", methods=["POST"])
 
@@ -844,7 +839,7 @@ def upload_video():
     decoded_token = verify_firebase_token(request)
     if not decoded_token:
         return jsonify({"error": "Unauthorized"}), 401
-    # ✅ SIZE CHECK — MUST BE BEFORE reading file
+    # SIZE CHECK 
     MAX_FILE_SIZE_MB = 500
     MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
@@ -853,27 +848,21 @@ def upload_video():
             "error": f"File too large. Max size is {MAX_FILE_SIZE_MB}MB."
         }), 400
 
-    # ✅ Now check file exists
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
     video_file  = request.files["video"]
-    # Validate file extension
     if not allowed_file(video_file.filename):
         return jsonify({
             "error": "Invalid file type. Only mp4, mov, avi, webm allowed."
         }), 400
 
-    # Validate MIME type (extra safety)
     if not video_file.mimetype.startswith("video/"):
         return jsonify({
             "error": "Uploaded file is not a valid video."
         }), 400
 
-    # Validate file size
-    #video_file.seek(0, os.SEEK_END)
-    #file_size_mb = video_file.tell() / (1024 * 1024)
-    #video_file.seek(0)
+    
 
     firebase_uid = request.form.get("firebase_uid")
     tag_name    = request.form.get("tag_name") or "General"
@@ -883,7 +872,6 @@ def upload_video():
     if not firebase_uid:
         return jsonify({"error": "firebase_uid missing"}), 400
 
-    # Auto-create user record if this is their first upload
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
     if not user:
         user = User(
@@ -894,14 +882,13 @@ def upload_video():
         db.session.add(user)
         db.session.commit()
 
-    # Find existing tag or create a new one
     tag = Tag.query.filter_by(user_id=user.id, tag_name=tag_name).first()
     if not tag:
         tag = Tag(tag_name=tag_name, user_id=user.id)
         db.session.add(tag)
         db.session.commit()
 
-    # Upload video to Cloudinary
+    
     try:
         result = cloudinary.uploader.upload_large(
             video_file.stream,
@@ -913,7 +900,6 @@ def upload_video():
         print("CLOUDINARY ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
-    # Save video record to DB before processing
     new_video = Video(
         video_title=video_title,
         cloudinary_url=cloudinary_url,
@@ -927,12 +913,10 @@ def upload_video():
     print("Processing video from Cloudinary...")
 
     try:
-        # Run full pipeline — returns transcript + all CV scores
         text, duration, silent, posture_score, gesture_score, eye_contact_score = (
             process_video_from_cloudinary(cloudinary_url)
         )
 
-        # Guard against silent or near-silent videos
         if silent or len(text.split()) < 10:
             speech_rate          = 0
             filler_words         = 0
@@ -952,7 +936,6 @@ def upload_video():
             topic_relevance_reason   = content_result["topic_relevance_reason"]
             content_structure_reason = content_result["content_structure_reason"]
 
-        # Convert raw metrics to 0-100 scores
         speech_rate_score = score_speech_rate(speech_rate)
         filler_score      = score_filler_words(filler_words, duration)
 
@@ -1011,9 +994,7 @@ def upload_video():
     })
 
 
-# ─────────────────────────────────────────
-# ROUTE — UPLOAD VIDEO (SSE progress)
-# ─────────────────────────────────────────
+# ROUTE — UPLOAD VIDEO 
 
 @app.route("/api/upload-video-sse", methods=["POST"])
 def upload_video_sse():
@@ -1028,12 +1009,12 @@ def upload_video_sse():
         data: {"error": "..."}\n\n   ← on failure
     """
 
-    # ── auth ────────────────────────────────────────────────────────────────
+    #  auth 
     decoded_token = verify_firebase_token(request)
     if not decoded_token:
         return jsonify({"error": "Unauthorized"}), 401
 
-    # ── size guard ──────────────────────────────────────────────────────────
+    #  size guard 
     MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024
     if request.content_length and request.content_length > MAX_FILE_SIZE_BYTES:
         return jsonify({"error": "File too large. Max size is 500 MB."}), 400
@@ -1057,13 +1038,11 @@ def upload_video_sse():
     if not firebase_uid:
         return jsonify({"error": "firebase_uid missing"}), 400
 
-    # Read file bytes now — stream will be consumed inside the generator thread
     video_bytes    = video_file.read()
     video_filename = video_file.filename
     video_mimetype = video_file.mimetype
 
-    # Queue used to pass results (or errors) from the worker thread back to
-    # the SSE generator.
+   
     result_q: queue.Queue = queue.Queue()
 
     def _worker():
@@ -1074,7 +1053,6 @@ def upload_video_sse():
             result_q.put(("event", payload))
 
         try:
-            # ── DB: user / tag ──────────────────────────────────────────────
             with app.app_context():
                 user = User.query.filter_by(firebase_uid=firebase_uid).first()
                 if not user:
@@ -1088,7 +1066,6 @@ def upload_video_sse():
                     db.session.add(tag)
                     db.session.commit()
 
-                # ── Stage 1: upload to Cloudinary ───────────────────────────
                 emit(1, "Uploading video", 10)
 
                 import io
@@ -1116,7 +1093,6 @@ def upload_video_sse():
 
                 emit(1, "Uploading video", 25)
 
-                # ── Stage 2: CV pipeline ────────────────────────────────────
                 emit(2, "Analysing posture and gestures", 35)
 
                 try:
@@ -1135,12 +1111,9 @@ def upload_video_sse():
 
                 emit(2, "Analysing posture and gestures", 55)
 
-                # ── Stage 3: Whisper transcription ──────────────────────────
                 emit(3, "Transcribing speech", 65)
 
-                # (transcription already done inside process_video_from_cloudinary)
-
-                # ── Stage 4: Groq content analysis ──────────────────────────
+               
                 emit(4, "Analysing content", 75)
 
                 if silent or len(text.split()) < 10:
@@ -1160,7 +1133,6 @@ def upload_video_sse():
 
                 emit(4, "Analysing content", 90)
 
-                # ── finalise scores + DB ────────────────────────────────────
                 speech_rate_score = score_speech_rate(speech_rate)
                 filler_score      = score_filler_words(filler_words, duration)
 
@@ -1232,9 +1204,7 @@ def upload_video_sse():
     )
 
 
-# ─────────────────────────────────────────
 # ROUTES — USER MANAGEMENT
-# ─────────────────────────────────────────
 
 @app.route("/api/create-or-get-user", methods=["POST"])
 def create_or_get_user():
@@ -1296,9 +1266,7 @@ def delete_user(firebase_uid):
     return jsonify({"message": "User deleted successfully"})
 
 
-# ─────────────────────────────────────────
 # ROUTES — TAGS
-# ─────────────────────────────────────────
 
 @app.route("/api/get-tags/<firebase_uid>", methods=["GET"])
 def get_tags(firebase_uid):
@@ -1345,9 +1313,8 @@ def delete_tag(tag_id):
         return jsonify({"success": False})
 
 
-# ─────────────────────────────────────────
 # ROUTES — VIDEOS
-# ─────────────────────────────────────────
+
 
 @app.route("/api/get-videos/<firebase_uid>", methods=["GET"])
 def get_videos(firebase_uid):
@@ -1401,9 +1368,7 @@ def delete_video(video_id):
         return jsonify({"success": False})
 
 
-# ─────────────────────────────────────────
 # ROUTES — ANALYTICS
-# ─────────────────────────────────────────
 
 @app.route("/api/user-stats/<firebase_uid>", methods=["GET"])
 def user_stats(firebase_uid):
@@ -1489,9 +1454,7 @@ def tag_analytics():
     ]})
 
 
-# ─────────────────────────────────────────
-# ROUTES — PAGE RENDERING
-# ─────────────────────────────────────────
+# ROUTES
 
 @app.route("/")
 @app.route("/index")
@@ -1549,7 +1512,7 @@ def analysis():
         a.content_structure_reason or ""
     )
 
-    # ── score comparison: find the previous video under the same tag ──────
+    #  score comparison
     prev_score = None
     prev_title = None
     score_diff = None
@@ -1593,7 +1556,7 @@ def analytics():
 # ─────────────────────────────────────────
 # Import lazily so the app still starts if Redis is not configured — the
 # synchronous routes (/api/upload-video, /api/upload-video-sse) remain
-# fully functional without Celery.
+# fully functional without Celery. 
 
 def _get_celery():
     try:
@@ -1623,17 +1586,17 @@ def upload_video_async():
                      "Install celery + redis and set REDIS_URL."
         }), 503
 
-    # ── Auth ──────────────────────────────────────────────────────────────────
+    #  Auth 
     decoded_token = verify_firebase_token(request)
     if not decoded_token:
         return jsonify({"error": "Unauthorized"}), 401
 
-    # ── Size guard ────────────────────────────────────────────────────────────
+    #  Size guard 
     MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024
     if request.content_length and request.content_length > MAX_FILE_SIZE_BYTES:
         return jsonify({"error": "File too large. Max size is 500 MB."}), 400
 
-    # ── File validation ───────────────────────────────────────────────────────
+    #  File validation 
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
@@ -1647,7 +1610,7 @@ def upload_video_async():
     if not video_file.mimetype.startswith("video/"):
         return jsonify({"error": "Uploaded file is not a valid video."}), 400
 
-    # ── Form data ─────────────────────────────────────────────────────────────
+    #  Form data 
     firebase_uid = request.form.get("firebase_uid")
     tag_name     = request.form.get("tag_name") or "General"
     video_title  = request.form.get("video_title") or "Untitled"
@@ -1656,7 +1619,7 @@ def upload_video_async():
     if not firebase_uid:
         return jsonify({"error": "firebase_uid missing"}), 400
 
-    # ── Upsert user + tag ─────────────────────────────────────────────────────
+    #  Upsert user + tag 
     user = User.query.filter_by(firebase_uid=firebase_uid).first()
     if not user:
         user = User(
@@ -1673,7 +1636,7 @@ def upload_video_async():
         db.session.add(tag)
         db.session.commit()
 
-    # ── Upload to Cloudinary ──────────────────────────────────────────────────
+    #  Upload to Cloudinary 
     try:
         result = cloudinary.uploader.upload_large(
             video_file.stream,
@@ -1685,7 +1648,7 @@ def upload_video_async():
         print("CLOUDINARY ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
-    # ── Save Video row (Analysis is filled in by the Celery task) ─────────────
+    #  Save Video
     new_video = Video(
         video_title=video_title,
         cloudinary_url=cloudinary_url,
@@ -1696,7 +1659,7 @@ def upload_video_async():
     db.session.add(new_video)
     db.session.commit()
 
-    # ── Dispatch task ─────────────────────────────────────────────────────────
+    #  Dispatch task 
     from celery_worker import process_video_task  # local import — keeps startup fast
 
     task = process_video_task.delay(
@@ -1762,9 +1725,7 @@ def job_status(job_id):
 
 
 
-# ─────────────────────────────────────────
 # ENTRY POINT
-# ─────────────────────────────────────────
 
 if __name__ == "__main__":
     with app.app_context():
